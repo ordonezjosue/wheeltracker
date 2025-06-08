@@ -1,22 +1,24 @@
 import streamlit as st
 import pandas as pd
+import os
 from datetime import date
 
 st.set_page_config(page_title="Wheel Strategy Tracker", layout="wide")
 st.title("🛞 Wheel Strategy Tracker")
 
-# CSV file to store trades
-CSV_FILE = "wheel_trades.csv"
+# --- Path to your GitHub-tracked CSV file ---
+CSV_PATH = "data/wheel_trades.csv"
 
-# Load or initialize data
-try:
-    df = pd.read_csv(CSV_FILE, parse_dates=["Open Date", "Close/Assignment Date"])
-except FileNotFoundError:
+# --- Load or create CSV ---
+if os.path.exists(CSV_PATH):
+    df = pd.read_csv(CSV_PATH, parse_dates=["Open Date", "Close/Assignment Date"])
+else:
     df = pd.DataFrame(columns=[
         "Ticker", "Trade Type", "Open Date", "Close/Assignment Date",
-        "Strike", "Premium", "Qty", "Expiration", "Result", "Underlying Price",
-        "Assigned Price", "Notes"
+        "Strike", "Premium", "Qty", "Expiration", "Result",
+        "Underlying Price", "Assigned Price", "Notes"
     ])
+    df.to_csv(CSV_PATH, index=False)
 
 # --- Trade Entry Form ---
 st.sidebar.header("➕ Add New Trade")
@@ -51,13 +53,14 @@ with st.sidebar.form("trade_form"):
             "Notes": notes
         }])
         df = pd.concat([df, new_row], ignore_index=True)
-        df.to_csv(CSV_FILE, index=False)
-        st.sidebar.success("✅ Trade saved!")
+        df.to_csv(CSV_PATH, index=False)
+        st.sidebar.success("✅ Trade saved to wheel_trades.csv!")
 
-# --- Dashboard Views ---
+# --- Display Trade Log ---
 st.subheader("📋 Trade Log")
 st.dataframe(df.sort_values("Open Date", ascending=False).reset_index(drop=True))
 
+# --- Performance Summary ---
 st.subheader("📈 Performance Summary")
 total_premium = (df["Premium"] * df["Qty"]).sum()
 total_trades = len(df)
@@ -68,4 +71,5 @@ col1.metric("Total Premium Collected", f"${total_premium:,.2f}")
 col2.metric("Total Trades", total_trades)
 col3.metric("Assignments", len(assignments))
 
+# --- Export Option ---
 st.download_button("📥 Download CSV", df.to_csv(index=False), file_name="wheel_trades.csv")
