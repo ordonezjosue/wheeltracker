@@ -54,7 +54,13 @@ with st.sidebar.form("trade_form"):
             "Assigned Price": assigned_price,
             "Notes": notes
         }])
+
         df = pd.concat([df, new_row], ignore_index=True)
+
+        # ✅ Convert date columns properly (avoids ArrowTypeError)
+        df["Open Date"] = pd.to_datetime(df["Open Date"], errors='coerce')
+        df["Close/Assignment Date"] = pd.to_datetime(df["Close/Assignment Date"], errors='coerce')
+
         df.to_csv(CSV_PATH, index=False)
         st.sidebar.success("✅ Trade saved to wheel_trades.csv!")
 
@@ -66,7 +72,7 @@ except Exception as e:
     st.error(f"⚠️ Could not sort by Open Date: {e}")
     st.dataframe(df)
 
-# --- Summary Stats ---
+# --- Performance Summary ---
 st.subheader("📈 Performance Summary")
 df["Premium"] = pd.to_numeric(df["Premium"], errors="coerce").fillna(0)
 df["Qty"] = pd.to_numeric(df["Qty"], errors="coerce").fillna(0)
@@ -80,4 +86,5 @@ col1.metric("Total Premium Collected", f"${total_premium:,.2f}")
 col2.metric("Total Trades", total_trades)
 col3.metric("Assignments", len(assignments))
 
+# --- CSV Download ---
 st.download_button("📥 Download CSV", df.to_csv(index=False), file_name="wheel_trades.csv")
