@@ -9,9 +9,11 @@ st.title("🛞 Wheel Strategy Tracker")
 # --- Path to your GitHub-tracked CSV file ---
 CSV_PATH = "data/wheel_trades.csv"
 
-# --- Load or create CSV ---
+# --- Load or create CSV safely ---
 if os.path.exists(CSV_PATH):
-    df = pd.read_csv(CSV_PATH, parse_dates=["Open Date", "Close/Assignment Date"])
+    df = pd.read_csv(CSV_PATH, dtype=str, keep_default_na=False)
+    df["Open Date"] = pd.to_datetime(df["Open Date"], errors='coerce')
+    df["Close/Assignment Date"] = pd.to_datetime(df["Close/Assignment Date"], errors='coerce')
 else:
     df = pd.DataFrame(columns=[
         "Ticker", "Trade Type", "Open Date", "Close/Assignment Date",
@@ -56,12 +58,19 @@ with st.sidebar.form("trade_form"):
         df.to_csv(CSV_PATH, index=False)
         st.sidebar.success("✅ Trade saved to wheel_trades.csv!")
 
-# --- Display Trade Log ---
+# --- Trade Log ---
 st.subheader("📋 Trade Log")
-st.dataframe(df.sort_values("Open Date", ascending=False).reset_index(drop=True))
+try:
+    st.dataframe(df.sort_values("Open Date", ascending=False).reset_index(drop=True))
+except Exception as e:
+    st.error(f"⚠️ Could not sort by Open Date: {e}")
+    st.dataframe(df)
 
-# --- Performance Summary ---
+# --- Summary Stats ---
 st.subheader("📈 Performance Summary")
+df["Premium"] = pd.to_numeric(df["Premium"], errors="coerce").fillna(0)
+df["Qty"] = pd.to_numeric(df["Qty"], errors="coerce").fillna(0)
+
 total_premium = (df["Premium"] * df["Qty"]).sum()
 total_trades = len(df)
 assignments = df[df["Result"] == "Assigned"]
@@ -71,5 +80,4 @@ col1.metric("Total Premium Collected", f"${total_premium:,.2f}")
 col2.metric("Total Trades", total_trades)
 col3.metric("Assignments", len(assignments))
 
-# --- Export Option ---
 st.download_button("📥 Download CSV", df.to_csv(index=False), file_name="wheel_trades.csv")
