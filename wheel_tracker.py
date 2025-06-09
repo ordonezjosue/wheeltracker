@@ -1,26 +1,32 @@
 import streamlit as st
 import pandas as pd
-import os
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 from datetime import date
 
 st.set_page_config(page_title="Wheel Strategy Tracker", layout="wide")
-st.title("🛞 Wheel Strategy Tracker")
+st.title("\U0001F6DE Wheel Strategy Tracker (Google Sheets)")
 
-# --- Path to your GitHub-tracked CSV file ---
-CSV_PATH = "data/wheel_trades.csv"
+# --- Google Sheets Setup ---
+SHEET_NAME = "Wheel Strategy Trades"  # Google Sheet name
+CREDENTIALS_PATH = "google_sheets_credentials.json"
 
-# --- Load or create CSV safely ---
-if os.path.exists(CSV_PATH):
-    df = pd.read_csv(CSV_PATH, dtype=str, keep_default_na=False)
-    df["Open Date"] = pd.to_datetime(df["Open Date"], errors='coerce')
-    df["Close/Assignment Date"] = pd.to_datetime(df["Close/Assignment Date"], errors='coerce')
-else:
-    df = pd.DataFrame(columns=[
-        "Ticker", "Trade Type", "Open Date", "Close/Assignment Date",
-        "Strike", "Premium", "Qty", "Expiration", "Result",
-        "Underlying Price", "Assigned Price", "Notes"
-    ])
-    df.to_csv(CSV_PATH, index=False)
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+creds = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_PATH, scope)
+client = gspread.authorize(creds)
+sheet = client.open(SHEET_NAME).sheet1
+
+# --- Load data from Google Sheets ---
+data = sheet.get_all_records()
+df = pd.DataFrame(data)
+
+# Parse date columns
+for col in ["Open Date", "Close/Assignment Date", "Expiration"]:
+    if col in df.columns:
+        df[col] = pd.to_datetime(df[col], errors="coerce")
+
+df["Premium"] = pd.to_numeric(df["Premium"], errors="coerce").fillna(0)
+df["Qty"] = pd.to_numeric(df["Qty"], errors="coerce").fillna(0)
 
 # --- Trade Entry Form ---
 st.sidebar.header("➕ Add New Trade")
@@ -40,32 +46,25 @@ with st.sidebar.form("trade_form"):
     submit = st.form_submit_button("Save Trade")
 
     if submit:
-        new_row = pd.DataFrame([{
-            "Ticker": ticker,
-            "Trade Type": trade_type,
-            "Open Date": open_date,
-            "Close/Assignment Date": close_date,
-            "Strike": strike,
-            "Premium": premium,
-            "Qty": qty,
-            "Expiration": expiration,
-            "Result": result,
-            "Underlying Price": price,
-            "Assigned Price": assigned_price,
-            "Notes": notes
-        }])
-
-        df = pd.concat([df, new_row], ignore_index=True)
-
-        # ✅ Convert date columns properly (avoids ArrowTypeError)
-        df["Open Date"] = pd.to_datetime(df["Open Date"], errors='coerce')
-        df["Close/Assignment Date"] = pd.to_datetime(df["Close/Assignment Date"], errors='coerce')
-
-        df.to_csv(CSV_PATH, index=False)
-        st.sidebar.success("✅ Trade saved to wheel_trades.csv!")
+        new_row = [
+            ticker,
+            trade_type,
+            open_date.strftime("%Y-%m-%d"),
+            close_date.strftime("%Y-%m-%d"),
+            strike,
+            premium,
+            qty,
+            expiration.strftime("%Y-%m-%d"),
+            result,
+            price,
+            assigned_price,
+            notes
+        ]
+        sheet.append_row(new_row)
+        st.sidebar.success("✅ Trade saved to Google Sheets!")
 
 # --- Trade Log ---
-st.subheader("📋 Trade Log")
+st.subheader("\U0001F4CB Trade Log")
 try:
     st.dataframe(df.sort_values("Open Date", ascending=False).reset_index(drop=True))
 except Exception as e:
@@ -73,10 +72,7 @@ except Exception as e:
     st.dataframe(df)
 
 # --- Performance Summary ---
-st.subheader("📈 Performance Summary")
-df["Premium"] = pd.to_numeric(df["Premium"], errors="coerce").fillna(0)
-df["Qty"] = pd.to_numeric(df["Qty"], errors="coerce").fillna(0)
-
+st.subheader("\U0001F4C8 Performance Summary")
 total_premium = (df["Premium"] * df["Qty"]).sum()
 total_trades = len(df)
 assignments = df[df["Result"] == "Assigned"]
@@ -86,5 +82,4 @@ col1.metric("Total Premium Collected", f"${total_premium:,.2f}")
 col2.metric("Total Trades", total_trades)
 col3.metric("Assignments", len(assignments))
 
-# --- CSV Download ---
-st.download_button("📥 Download CSV", df.to_csv(index=False), file_name="wheel_trades.csv")
+st.download_button("\U0001F4C5 Download CSV", df.to_csv(index=False), file_name="wheel_trades.csv")
