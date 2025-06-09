@@ -3,16 +3,18 @@ import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import date
+import json
 
 st.set_page_config(page_title="Wheel Strategy Tracker", layout="wide")
 st.title("\U0001F6DE Wheel Strategy Tracker (Google Sheets)")
 
 # --- Google Sheets Setup ---
-SHEET_NAME = "Wheel Strategy Trades"  # Google Sheet name
-CREDENTIALS_PATH = "google_sheets_credentials.json"
-
+SHEET_NAME = "Wheel Strategy Trades"
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_PATH, scope)
+
+# Use secrets when running on Streamlit Cloud
+creds_dict = json.loads(st.secrets["GOOGLE_SHEETS_CREDS"])
+creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 client = gspread.authorize(creds)
 sheet = client.open(SHEET_NAME).sheet1
 
