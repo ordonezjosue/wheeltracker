@@ -28,8 +28,10 @@ for col in ["Open Date", "Close/Assignment Date", "Expiration"]:
     if col in df.columns:
         df[col] = pd.to_datetime(df[col], errors="coerce")
 
-df["Premium"] = pd.to_numeric(df["Premium"], errors="coerce").fillna(0)
-df["Qty"] = pd.to_numeric(df["Qty"], errors="coerce").fillna(0)
+if "Premium" in df.columns:
+    df["Premium"] = pd.to_numeric(df["Premium"], errors="coerce").fillna(0)
+if "Qty" in df.columns:
+    df["Qty"] = pd.to_numeric(df["Qty"], errors="coerce").fillna(0)
 
 # --- Trade Entry Form ---
 st.sidebar.header("➕ Add New Trade")
@@ -76,9 +78,9 @@ except Exception as e:
 
 # --- Performance Summary ---
 st.subheader("\U0001F4C8 Performance Summary")
-total_premium = (df["Premium"] * df["Qty"]).sum()
+total_premium = (df["Premium"] * df["Qty"]).sum() if "Premium" in df.columns and "Qty" in df.columns else 0
 total_trades = len(df)
-assignments = df[df["Result"] == "Assigned"]
+assignments = df[df["Result"] == "Assigned"] if "Result" in df.columns else pd.DataFrame()
 
 col1, col2, col3 = st.columns(3)
 col1.metric("Total Premium Collected", f"${total_premium:,.2f}")
