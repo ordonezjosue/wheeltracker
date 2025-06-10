@@ -11,8 +11,6 @@ st.title("\U0001F6DE Wheel Strategy Tracker (Google Sheets)")
 # --- Google Sheets Setup ---
 SHEET_NAME = "Wheel Strategy Trades"
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-
-# Use secrets when running on Streamlit Cloud
 creds_dict = json.loads(st.secrets["GOOGLE_SHEETS_CREDS"])
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 client = gspread.authorize(creds)
@@ -22,10 +20,8 @@ sheet = client.open(SHEET_NAME).sheet1
 data = sheet.get_all_records()
 df = pd.DataFrame(data)
 
-# Ensure column headers are strings before stripping
+# Clean and rename columns
 df.columns = pd.Index([str(col).strip() for col in df.columns])
-
-# Standardize column names if necessary
 rename_map = {
     "Close/Assignment Date": "Close Date",
     "Strike": "Strike Price",
@@ -34,16 +30,13 @@ rename_map = {
 }
 df.rename(columns=rename_map, inplace=True)
 
-# Parse date columns
+# Parse dates and numbers
 for col in ["Open Date", "Close Date", "Expiration"]:
     if col in df.columns:
         df[col] = pd.to_datetime(df[col], errors="coerce")
-
-# Parse numeric columns
-if "Premium" in df.columns:
-    df["Premium"] = pd.to_numeric(df["Premium"], errors="coerce").fillna(0)
-if "Qty" in df.columns:
-    df["Qty"] = pd.to_numeric(df["Qty"], errors="coerce").fillna(0)
+df["Premium"] = pd.to_numeric(df.get("Premium", 0), errors="coerce").fillna(0)
+df["Qty"] = pd.to_numeric(df.get("Qty", 0), errors="coerce").fillna(0)
+df["Assigned Price"] = pd.to_numeric(df.get("Assigned Price", 0), errors="coerce").fillna(0)
 
 # --- Trade Entry Form ---
 st.sidebar.header("➕ Add New Trade")
@@ -90,10 +83,7 @@ except Exception as e:
 
 # --- Performance Summary ---
 st.subheader("\U0001F4C8 Performance Summary")
-total_premium = 0
-if {"Premium", "Qty"}.issubset(df.columns):
-    total_premium = (df["Premium"] * df["Qty"]).sum()
-
+total_premium = (df["Premium"] * df["Qty"]).sum() if {"Premium", "Qty"}.issubset(df.columns) else 0
 total_trades = len(df)
 assignments = df[df["Result"].str.strip().str.lower() == "assigned"] if "Result" in df.columns else pd.DataFrame()
 
@@ -102,11 +92,25 @@ col1.metric("Total Premium Collected", f"${total_premium:,.2f}")
 col2.metric("Total Trades", total_trades)
 col3.metric("Assignments", len(assignments))
 
-# Optional: force column order for download
+# --- Cost Basis Tracker ---
+st.subheader("\U0001F4CA Cost Basis Tracker")
+if not assignments.empty:
+    assignments["Total Shares"] = assignments["Qty"] * 100
+    assignments["Total Cost"] = assignments["Total Shares"] * assignments["Assigned Price"]
+
+    cost_basis = assignments.groupby("Ticker").agg(
+        Shares_held=pd.NamedAgg(column="Total Shares", aggfunc="sum"),
+        Total_cost=pd.NamedAgg(column="Total Cost", aggfunc="sum")
+    )
+    cost_basis["Avg Cost/Share"] = cost_basis["Total_cost"] / cost_basis["Shares_held"]
+    st.dataframe(cost_basis.reset_index())
+else:
+    st.info("No assigned trades yet to calculate cost basis.")
+
+# --- CSV Download ---
 expected_columns = [
     "Ticker", "Trade Type", "Open Date", "Close Date", "Strike Price",
     "Premium", "Qty", "Expiration", "Result", "Underlying Price", "Assigned Price", "Notes"
 ]
 export_df = df[[col for col in expected_columns if col in df.columns]]
-
 st.download_button("\U0001F4C5 Download CSV", export_df.to_csv(index=False), file_name="wheel_trades.csv")
