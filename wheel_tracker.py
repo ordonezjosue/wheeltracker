@@ -25,11 +25,21 @@ df = pd.DataFrame(data)
 # Ensure column headers are strings before stripping
 df.columns = pd.Index([str(col).strip() for col in df.columns])
 
+# Standardize column names if necessary
+rename_map = {
+    "Close/Assignment Date": "Close Date",
+    "Strike": "Strike Price",
+    "Underlying Price": "Underlying Price",
+    "Assigned Price (if applicable)": "Assigned Price"
+}
+df.rename(columns=rename_map, inplace=True)
+
 # Parse date columns
-for col in ["Open Date", "Close/Assignment Date", "Expiration"]:
+for col in ["Open Date", "Close Date", "Expiration"]:
     if col in df.columns:
         df[col] = pd.to_datetime(df[col], errors="coerce")
 
+# Parse numeric columns
 if "Premium" in df.columns:
     df["Premium"] = pd.to_numeric(df["Premium"], errors="coerce").fillna(0)
 if "Qty" in df.columns:
@@ -80,13 +90,23 @@ except Exception as e:
 
 # --- Performance Summary ---
 st.subheader("\U0001F4C8 Performance Summary")
-total_premium = (df["Premium"] * df["Qty"]).sum() if "Premium" in df.columns and "Qty" in df.columns else 0
+total_premium = 0
+if {"Premium", "Qty"}.issubset(df.columns):
+    total_premium = (df["Premium"] * df["Qty"]).sum()
+
 total_trades = len(df)
-assignments = df[df["Result"] == "Assigned"] if "Result" in df.columns else pd.DataFrame()
+assignments = df[df["Result"].str.strip().str.lower() == "assigned"] if "Result" in df.columns else pd.DataFrame()
 
 col1, col2, col3 = st.columns(3)
 col1.metric("Total Premium Collected", f"${total_premium:,.2f}")
 col2.metric("Total Trades", total_trades)
 col3.metric("Assignments", len(assignments))
 
-st.download_button("\U0001F4C5 Download CSV", df.to_csv(index=False), file_name="wheel_trades.csv")
+# Optional: force column order for download
+expected_columns = [
+    "Ticker", "Trade Type", "Open Date", "Close Date", "Strike Price",
+    "Premium", "Qty", "Expiration", "Result", "Underlying Price", "Assigned Price", "Notes"
+]
+export_df = df[[col for col in expected_columns if col in df.columns]]
+
+st.download_button("\U0001F4C5 Download CSV", export_df.to_csv(index=False), file_name="wheel_trades.csv")
