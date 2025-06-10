@@ -23,10 +23,7 @@ data = sheet.get_all_records()
 df = pd.DataFrame(data)
 
 # Ensure column headers are strings before stripping
-if df.columns.dtype == object:
-    df.columns = df.columns.str.strip()  # Remove leading/trailing spaces
-else:
-    df.columns = [str(col).strip() for col in df.columns]
+df.columns = pd.Index([str(col).strip() for col in df.columns])
 
 # Parse date columns
 for col in ["Open Date", "Close/Assignment Date", "Expiration"]:
