@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import gspread
+import yfinance as yf  # ✅ NEW
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import date
 import json
@@ -38,6 +39,26 @@ df["Premium"] = pd.to_numeric(df.get("Premium", 0), errors="coerce").fillna(0)
 df["Qty"] = pd.to_numeric(df.get("Qty", 0), errors="coerce").fillna(0)
 df["Assigned Price"] = pd.to_numeric(df.get("Assigned Price", 0), errors="coerce").fillna(0)
 
+# ✅ NEW: Fetch current prices using yfinance
+@st.cache_data(ttl=3600)
+def get_current_prices(tickers):
+    prices = {}
+    for ticker in tickers:
+        try:
+            t = yf.Ticker(ticker)
+            price = t.fast_info.get("last_price", None)
+            if price is None:
+                price = t.info.get("regularMarketPrice", None)
+            prices[ticker] = price
+        except Exception:
+            prices[ticker] = None
+    return prices
+
+if not df.empty and "Ticker" in df.columns:
+    tickers = df["Ticker"].dropna().unique()
+    current_prices = get_current_prices(tickers)
+    df["Current Price"] = df["Ticker"].map(current_prices)  # ✅ NEW
+
 # --- Trade Entry Form ---
 st.sidebar.header("➕ Add New Trade")
 with st.sidebar.form("trade_form"):
@@ -72,6 +93,7 @@ with st.sidebar.form("trade_form"):
         ]
         sheet.append_row(new_row)
         st.sidebar.success("✅ Trade saved to Google Sheets!")
+        st.experimental_rerun()  # ✅ NEW: refresh app after saving
 
 # --- Trade Log ---
 st.subheader("\U0001F4CB Trade Log")
@@ -110,7 +132,7 @@ else:
 # --- CSV Download ---
 expected_columns = [
     "Ticker", "Trade Type", "Open Date", "Close Date", "Strike Price",
-    "Premium", "Qty", "Expiration", "Result", "Underlying Price", "Assigned Price", "Notes"
+    "Premium", "Qty", "Expiration", "Result", "Underlying Price", "Assigned Price", "Notes", "Current Price"
 ]
 export_df = df[[col for col in expected_columns if col in df.columns]]
 st.download_button("\U0001F4C5 Download CSV", export_df.to_csv(index=False), file_name="wheel_trades.csv")
