@@ -137,6 +137,30 @@ if strategy == "Wheel Strategy":
                 st.success("✅ Covered Call saved.")
                 st.rerun()
 
+    elif step == "Called Away":
+        st.subheader("Finalize Wheel Cycle - Called Away")
+        covered_calls = df[(df["Strategy"] == "Wheel Strategy") & (df["Process"] == "Covered Call") & (df["Result"] == "Open")]
+        if covered_calls.empty:
+            st.warning("No covered calls available to finalize.")
+        else:
+            idx = st.selectbox("Select Covered Call", covered_calls.index)
+            row = covered_calls.loc[idx]
+            ticker = row["Ticker"]
+            qty = int(row["Qty"])
+            call_strike = float(row["Strike"])
+            cc_credit = float(row["Credit Collected"])
+            assigned_price = float(row["Assigned Price"])
+            put = df[(df["Strategy"] == "Wheel Strategy") & (df["Process"] == "Sell Put") & (df["Ticker"] == ticker)].sort_values("Date", ascending=False).head(1)
+            put_credit = float(put["Credit Collected"].values[0]) if not put.empty else 0
+            shares_owned = qty * 100
+            capital_gain = (call_strike - assigned_price) * shares_owned
+            total_credit = (put_credit + cc_credit) * qty * 100
+            final_pl = capital_gain + total_credit
+            sheet.update_cell(idx + 2, df.columns.get_loc("Result") + 1, "Called Away")
+            sheet.update_cell(idx + 2, df.columns.get_loc("P/L") + 1, round(final_pl, 2))
+            st.success(f"✅ Wheel finalized. Total P/L: ${round(final_pl, 2):,.2f}")
+            st.rerun()
+
 # --- Chart ---
 st.subheader("\U0001F4CB Current Trades")
 if df.empty:
