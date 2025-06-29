@@ -155,16 +155,43 @@ if strategy == "Wheel Strategy":
                     st.rerun()
 
     elif step == "Called Away":
-        st.subheader("Shares Called Away")
-        cc_called = df[
-            (df["Strategy"].str.strip().str.lower() == "wheel strategy") &
-            (df["Process"].str.strip().str.lower() == "covered call") &
-            (df["Result"].str.strip().str.lower() == "called away")
+        st.subheader("Finalize Wheel Cycle - Called Away")
+        open_calls = df[
+            (df["Strategy"].str.lower() == "wheel strategy") &
+            (df["Process"].str.lower() == "covered call") &
+            (df["Result"].str.lower() == "open")
         ]
-        if cc_called.empty:
-            st.warning("No shares called away found.")
+        if open_calls.empty:
+            st.warning("No covered calls available to finalize.")
         else:
-            st.dataframe(cc_called)
+            idx = st.selectbox("Select Covered Call to Finalize", open_calls.index)
+            row_data = open_calls.loc[idx]
+            ticker = row_data["Ticker"]
+            assigned_price = float(row_data["Assigned Price"])
+            cc_strike = float(row_data["Strike"])
+            cc_credit = float(row_data["Credit Collected"])
+            current_price = get_current_price(ticker)
+            put_credit = 0.0
+            matching_put = df[
+                (df["Ticker"] == ticker) &
+                (df["Process"] == "Sell Put") &
+                (df["Date"] < row_data["Date"])
+            ].sort_values("Date", ascending=False).head(1)
+            if not matching_put.empty:
+                put_credit = float(matching_put["Credit Collected"].values[0])
+            final_pl = round(put_credit + cc_credit + (cc_strike - assigned_price), 2)
+            with st.form("finalize_wheel"):
+                st.write(f"**Put Credit:** ${put_credit}")
+                st.write(f"**Covered Call Credit:** ${cc_credit}")
+                st.write(f"**Assigned Price:** ${assigned_price}")
+                st.write(f"**Call Strike (Shares Called Away):** ${cc_strike}")
+                st.write(f"### Final P/L for {ticker}: ${final_pl}")
+                finalize = st.form_submit_button("Finalize and Record")
+                if finalize:
+                    sheet.update_cell(idx + 2, df.columns.get_loc("Result") + 1, "Called Away")
+                    sheet.update_cell(idx + 2, df.columns.get_loc("P/L") + 1, final_pl)
+                    st.success("✅ Wheel finalized and P/L recorded.")
+                    st.rerun()
 
 # --- Existing Data Viewer ---
 st.subheader("\U0001F4CB Current Trades")
