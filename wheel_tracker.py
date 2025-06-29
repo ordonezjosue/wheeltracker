@@ -106,7 +106,7 @@ if strategy == "Wheel Strategy":
 
                         row = [
                             "Wheel Strategy", "Assignment", ticker, date.today().strftime("%Y-%m-%d"), strike, delta,
-                            dte, credit, qty, expiration, "Assigned", assigned_price, current_price, f"Assignment from row {assigned_row}"  
+                            dte, credit, qty, expiration, "Assigned", assigned_price, current_price, f"Assignment from row {assigned_row}"
                         ]
                         sheet.append_row(row)
                         st.rerun()
@@ -115,7 +115,8 @@ if strategy == "Wheel Strategy":
         st.subheader("Covered Call Entry")
         assigned = df[
             (df["Strategy"].str.strip().str.lower() == "wheel strategy") &
-            (df["Process"].str.strip().str.lower() == "assignment")
+            (df["Process"].str.strip().str.lower() == "assignment") &
+            (df["Result"].str.strip().str.lower() == "assigned")
         ]
         if assigned.empty:
             st.warning("No assigned positions available to sell a covered call.")
