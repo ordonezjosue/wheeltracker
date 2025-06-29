@@ -49,7 +49,7 @@ for col in required_columns:
 
 # --- Trade Entry Logic ---
 st.sidebar.header("➕ Guided Trade Entry")
-strategy = st.sidebar.selectbox("Select Strategy", ["Select", "Wheel Strategy"])
+strategy = st.sidebar.selectbox("Select Strategy", ["Select", "Wheel Strategy", "Put Credit Spread"])
 
 if strategy == "Wheel Strategy":
     unique_tickers = sorted(df["Ticker"].dropna().unique())
