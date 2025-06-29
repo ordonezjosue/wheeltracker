@@ -31,7 +31,7 @@ def get_current_price(ticker):
 try:
     data = sheet.get_all_records()
     df = pd.DataFrame(data)
-    df = df.loc[:, df.columns != '']  # Drop unnamed columns
+    df = df.loc[:, df.columns != '']
     df.columns = pd.Index([str(col).strip() for col in df.columns])
 except Exception as e:
     st.error(f"❌ Failed to load data: {e}")
@@ -77,30 +77,25 @@ if strategy == "Wheel Strategy":
             st.warning("Missing required columns in your sheet (Strategy, Process, Result). Please check your header row.")
         else:
             puts = df[
-                (df["Strategy"].str.strip().str.lower() == "wheel strategy") &
-                (df["Process"].str.strip().str.lower() == "sell put") &
-                (df["Result"].str.strip().str.lower() == "open")
+                (df["Strategy"].str.lower() == "wheel strategy") &
+                (df["Process"].str.lower() == "sell put") &
+                (df["Result"].str.lower() == "open")
             ]
             if puts.empty:
                 st.warning("No open puts available for assignment.")
             else:
                 assigned_row = st.selectbox("Select Put to Assign", puts.index)
                 ticker = puts.loc[assigned_row, "Ticker"]
-                date_entry = puts.loc[assigned_row, "Date"]
-                strike = puts.loc[assigned_row, "Strike"]
-                delta = puts.loc[assigned_row, "Delta"]
-                dte = puts.loc[assigned_row, "DTE"]
-                credit = puts.loc[assigned_row, "Credit Collected"]
-                qty = puts.loc[assigned_row, "Qty"]
+                strike = float(puts.loc[assigned_row, "Strike"])
+                delta = float(puts.loc[assigned_row, "Delta"])
+                dte = int(puts.loc[assigned_row, "DTE"])
+                credit = float(puts.loc[assigned_row, "Credit Collected"])
+                qty = int(puts.loc[assigned_row, "Qty"])
                 expiration = puts.loc[assigned_row, "Expiration"]
                 current_price = get_current_price(ticker)
-                assigned_price = 0.0
-
-                if "Assigned Price" in puts.columns:
-                    assigned_price = puts.loc[assigned_row, "Assigned Price"]
 
                 with st.form("assignment_form"):
-                    assigned_price = st.number_input("Assigned Price ($)", value=assigned_price or strike, format="%.2f")
+                    assigned_price = st.number_input("Assigned Price ($)", value=strike, format="%.2f")
                     submit = st.form_submit_button("Save Assignment")
                     if submit:
                         sheet.update_cell(assigned_row + 2, df.columns.get_loc("Result") + 1, "Assigned")
@@ -117,9 +112,9 @@ if strategy == "Wheel Strategy":
     elif step == "Covered Call":
         st.subheader("Covered Call Entry")
         assigned = df[
-            (df["Strategy"].str.strip().str.lower() == "wheel strategy") &
-            (df["Process"].str.strip().str.lower() == "assignment") &
-            (df["Result"].str.strip().str.lower() == "assigned")
+            (df["Strategy"].str.lower() == "wheel strategy") &
+            (df["Process"].str.lower() == "assignment") &
+            (df["Result"].str.lower() == "assigned")
         ]
         if assigned.empty:
             st.warning("No assigned positions available to sell a covered call.")
@@ -142,10 +137,7 @@ if strategy == "Wheel Strategy":
                     put_credit = 0.0
                     pl = 0.0
                     if trigger_close:
-                        matching_put = df[
-                            (df["Ticker"] == ticker) &
-                            (df["Process"] == "Sell Put")
-                        ].sort_values("Date", ascending=False).head(1)
+                        matching_put = df[(df["Ticker"] == ticker) & (df["Process"] == "Sell Put")].sort_values("Date", ascending=False).head(1)
                         if not matching_put.empty:
                             put_credit = float(matching_put["Credit Collected"].values[0]) * qty * 100
                             pl = put_credit + (cc_credit * qty * 100) + ((cc_strike - assigned_price) * qty * 100)
@@ -177,17 +169,12 @@ if strategy == "Wheel Strategy":
             cc_credit = float(row_data["Credit Collected"])
             current_price = get_current_price(ticker)
             put_credit = 0.0
-            matching_put = df[
-                (df["Ticker"] == ticker) &
-                (df["Process"] == "Sell Put") &
-                (df["Date"] < row_data["Date"])
-            ].sort_values("Date", ascending=False).head(1)
+            matching_put = df[(df["Ticker"] == ticker) & (df["Process"] == "Sell Put") & (df["Date"] < row_data["Date"])].sort_values("Date", ascending=False).head(1)
             if not matching_put.empty:
                 put_credit = float(matching_put["Credit Collected"].values[0]) * qty * 100
             final_pl = round(put_credit + (cc_credit * qty * 100) + ((cc_strike - assigned_price) * qty * 100), 2)
+
             with st.form("finalize_wheel"):
-                dte = st.number_input("Days to Expiration (DTE)", step=1, value=30)
-                expiration = date.today() + timedelta(days=int(dte))
                 st.write(f"**Put Credit:** ${put_credit:.2f}")
                 st.write(f"**Covered Call Credit:** ${cc_credit * qty * 100:.2f}")
                 st.write(f"**Capital Appreciation:** ${(cc_strike - assigned_price) * qty * 100:.2f}")
@@ -199,7 +186,7 @@ if strategy == "Wheel Strategy":
                     st.success("✅ Wheel finalized and P/L recorded.")
                     st.rerun()
 
-# --- Existing Data Viewer ---
+# --- Display Existing Trades ---
 st.subheader("\U0001F4CB Current Trades")
 if df.empty or "Date" not in df.columns:
     st.warning("No valid data found or missing 'Date' column. Please check your sheet format.")
@@ -213,19 +200,14 @@ else:
                 assigned_price = float(row["Assigned Price"])
                 cc_credit = float(row["Credit Collected"])
                 cc_strike = float(row["Strike"])
-                put_row = df[
-                    (df["Ticker"] == ticker) &
-                    (df["Process"] == "Sell Put") &
-                    (df["Date"] < row["Date"])
-                ].sort_values("Date", ascending=False).head(1)
+                put_row = df[(df["Ticker"] == ticker) & (df["Process"] == "Sell Put") & (df["Date"] < row["Date"])].sort_values("Date", ascending=False).head(1)
                 put_credit = float(put_row["Credit Collected"].values[0]) if not put_row.empty else 0.0
                 pl = (put_credit * qty * 100) + (cc_credit * qty * 100) + ((cc_strike - assigned_price) * qty * 100)
                 df.at[idx, "P/L"] = round(pl, 2)
             except Exception as e:
                 df.at[idx, "P/L"] = "Error"
 
-    display_df = df.drop(columns=["Notes"], errors="ignore")
-    st.dataframe(display_df.sort_values("Date", ascending=False).reset_index(drop=True))
+    st.dataframe(df.drop(columns=["Notes"], errors="ignore").sort_values("Date", ascending=False).reset_index(drop=True))
 
 # --- CSV Download ---
 st.download_button("\U0001F4BE Download All Trades as CSV", df.to_csv(index=False), file_name="wheel_trades.csv")
