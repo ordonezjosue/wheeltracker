@@ -51,9 +51,9 @@ if strategy == "Wheel Strategy":
             ticker = st.text_input("Ticker", value="SPY").upper()
             dte = st.number_input("Days to Expiration (DTE)", step=1)
             expiration = date_entry + timedelta(days=int(dte)) if dte else date.today()
-            strike = st.number_input("Strike Price", step=0.5)
+            strike = st.number_input("Strike Price ($)", step=0.5, format="%.2f")
             delta = st.number_input("Delta (Optional)", step=0.01)
-            credit = st.number_input("Credit Collected (excl. fees)", step=0.01)
+            credit = st.number_input("Credit Collected ($)", step=0.01, format="%.2f")
             qty = st.number_input("Contracts (Qty)", step=1, value=1)
             current_price = get_current_price(ticker)
             notes = st.text_area("Notes")
@@ -100,7 +100,7 @@ if strategy == "Wheel Strategy":
                     assigned_price = puts.loc[assigned_row, "Assigned Price"]
 
                 with st.form("assignment_form"):
-                    assigned_price = st.number_input("Assigned Price", value=assigned_price or strike)
+                    assigned_price = st.number_input("Assigned Price ($)", value=assigned_price or strike, format="%.2f")
                     submit = st.form_submit_button("Save Assignment")
                     if submit:
                         sheet.update_cell(assigned_row + 2, df.columns.get_loc("Result") + 1, "Assigned")
@@ -126,13 +126,13 @@ if strategy == "Wheel Strategy":
         else:
             assigned_row = st.selectbox("Select Assigned Position", assigned.index)
             ticker = assigned.loc[assigned_row, "Ticker"]
-            qty = assigned.loc[assigned_row, "Qty"]
-            assigned_price = assigned.loc[assigned_row, "Assigned Price"]
+            qty = int(assigned.loc[assigned_row, "Qty"])
+            assigned_price = float(assigned.loc[assigned_row, "Assigned Price"])
             current_price = get_current_price(ticker)
 
             with st.form("covered_call_form"):
-                cc_strike = st.number_input("Covered Call Strike", step=0.5)
-                cc_credit = st.number_input("Credit Collected", step=0.01)
+                cc_strike = st.number_input("Covered Call Strike ($)", step=0.5, format="%.2f")
+                cc_credit = st.number_input("Credit Collected ($)", step=0.01, format="%.2f")
                 cc_dte = st.number_input("Days to Expiration (DTE)", step=1, value=30)
                 cc_expiration = date.today() + timedelta(days=int(cc_dte))
                 result = st.selectbox("Result", ["Open", "Called Away", "Expired Worthless"])
@@ -147,8 +147,8 @@ if strategy == "Wheel Strategy":
                             (df["Process"] == "Sell Put")
                         ].sort_values("Date", ascending=False).head(1)
                         if not matching_put.empty:
-                            put_credit = float(matching_put["Credit Collected"].values[0])
-                            pl = put_credit + cc_credit + (cc_strike - assigned_price)
+                            put_credit = float(matching_put["Credit Collected"].values[0]) * qty
+                            pl = put_credit + (cc_credit * qty) + ((cc_strike - assigned_price) * qty * 100)
                     row = [
                         "Wheel Strategy", "Covered Call", ticker, date.today().strftime("%Y-%m-%d"), cc_strike, "", "",
                         cc_credit, qty, cc_expiration.strftime("%Y-%m-%d"),
@@ -171,6 +171,7 @@ if strategy == "Wheel Strategy":
             idx = st.selectbox("Select Covered Call to Finalize", open_calls.index)
             row_data = open_calls.loc[idx]
             ticker = row_data["Ticker"]
+            qty = int(row_data["Qty"])
             assigned_price = float(row_data["Assigned Price"])
             cc_strike = float(row_data["Strike"])
             cc_credit = float(row_data["Credit Collected"])
@@ -182,17 +183,17 @@ if strategy == "Wheel Strategy":
                 (df["Date"] < row_data["Date"])
             ].sort_values("Date", ascending=False).head(1)
             if not matching_put.empty:
-                put_credit = float(matching_put["Credit Collected"].values[0])
-            final_pl = round(put_credit + cc_credit + (cc_strike - assigned_price), 2)
+                put_credit = float(matching_put["Credit Collected"].values[0]) * qty
+            final_pl = round(put_credit + (cc_credit * qty) + ((cc_strike - assigned_price) * qty * 100), 2)
             with st.form("finalize_wheel"):
                 dte = st.number_input("Days to Expiration (DTE)", step=1, value=30)
                 expiration = date.today() + timedelta(days=int(dte))
-                st.write(f"**Put Credit:** ${put_credit}")
-                st.write(f"**Covered Call Credit:** ${cc_credit}")
-                st.write(f"**Assigned Price:** ${assigned_price}")
-                st.write(f"**Call Strike (Shares Called Away):** ${cc_strike}")
-                st.write(f"**Expiration Date (Auto):** {expiration.strftime('%Y-%m-%d')}")
-                st.write(f"### Final P/L for {ticker}: ${final_pl}")
+                st.write(f"**Put Credit:** ${put_credit:.2f}")
+                st.write(f"**Covered Call Credit:** ${cc_credit * qty:.2f}")
+                st.write(f"**Assigned Price:** ${assigned_price:.2f}")
+                st.write(f"**Call Strike (Shares Called Away):** ${cc_strike:.2f}")
+                st.write(f"**Capital Appreciation:** ${((cc_strike - assigned_price) * qty * 100):.2f}")
+                st.write(f"### Final P/L for {ticker}: ${final_pl:.2f}")
                 finalize = st.form_submit_button("Finalize and Record")
                 if finalize:
                     sheet.update_cell(idx + 2, df.columns.get_loc("Result") + 1, "Called Away")
@@ -210,6 +211,7 @@ else:
         if row["Process"] == "Covered Call" and row["Result"].lower() == "called away":
             try:
                 ticker = row["Ticker"]
+                qty = int(row["Qty"])
                 assigned_price = float(row["Assigned Price"])
                 cc_credit = float(row["Credit Collected"])
                 cc_strike = float(row["Strike"])
@@ -219,7 +221,7 @@ else:
                     (df["Date"] < row["Date"])
                 ].sort_values("Date", ascending=False).head(1)
                 put_credit = float(put_row["Credit Collected"].values[0]) if not put_row.empty else 0.0
-                pl = put_credit + cc_credit + (cc_strike - assigned_price)
+                pl = (put_credit * qty) + (cc_credit * qty) + ((cc_strike - assigned_price) * qty * 100)
                 df.at[idx, "P/L"] = round(pl, 2)
             except Exception as e:
                 df.at[idx, "P/L"] = "Error"
