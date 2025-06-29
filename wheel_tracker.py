@@ -55,7 +55,6 @@ if strategy == "Wheel Strategy":
             delta = st.number_input("Delta (Optional)", step=0.01)
             credit = st.number_input("Credit Collected (excl. fees)", step=0.01)
             qty = st.number_input("Contracts (Qty)", step=1, value=1)
-            expiration_input = st.date_input("Expiration Date", value=expiration)
             current_price = get_current_price(ticker)
             notes = st.text_area("Notes")
             submit = st.form_submit_button("Save Entry")
@@ -63,7 +62,7 @@ if strategy == "Wheel Strategy":
             if submit:
                 row = [
                     "Wheel Strategy", "Sell Put", ticker, date_entry.strftime("%Y-%m-%d"), strike, delta,
-                    dte, credit, qty, expiration_input.strftime("%Y-%m-%d"),
+                    dte, credit, qty, expiration.strftime("%Y-%m-%d"),
                     "Open", current_price, notes
                 ]
                 sheet.append_row([str(x) for x in row])
@@ -115,10 +114,6 @@ if strategy == "Wheel Strategy":
                         sheet.append_row([str(x) for x in row])
                         st.rerun()
 
-    # Additional logic for Covered Call and Called Away would follow here
-
-
-
     elif step == "Covered Call":
         st.subheader("Covered Call Entry")
         assigned = df[
@@ -138,7 +133,8 @@ if strategy == "Wheel Strategy":
             with st.form("covered_call_form"):
                 cc_strike = st.number_input("Covered Call Strike", step=0.5)
                 cc_credit = st.number_input("Credit Collected", step=0.01)
-                cc_expiration = st.date_input("Expiration Date")
+                cc_dte = st.number_input("Days to Expiration (DTE)", step=1, value=30)
+                cc_expiration = date.today() + timedelta(days=int(cc_dte))
                 result = st.selectbox("Result", ["Open", "Called Away", "Expired Worthless"])
                 trigger_close = st.checkbox("Finalize Wheel and Calculate Full P/L")
                 submit = st.form_submit_button("Save Covered Call")
@@ -189,10 +185,13 @@ if strategy == "Wheel Strategy":
                 put_credit = float(matching_put["Credit Collected"].values[0])
             final_pl = round(put_credit + cc_credit + (cc_strike - assigned_price), 2)
             with st.form("finalize_wheel"):
+                dte = st.number_input("Days to Expiration (DTE)", step=1, value=30)
+                expiration = date.today() + timedelta(days=int(dte))
                 st.write(f"**Put Credit:** ${put_credit}")
                 st.write(f"**Covered Call Credit:** ${cc_credit}")
                 st.write(f"**Assigned Price:** ${assigned_price}")
                 st.write(f"**Call Strike (Shares Called Away):** ${cc_strike}")
+                st.write(f"**Expiration Date (Auto):** {expiration.strftime('%Y-%m-%d')}")
                 st.write(f"### Final P/L for {ticker}: ${final_pl}")
                 finalize = st.form_submit_button("Finalize and Record")
                 if finalize:
