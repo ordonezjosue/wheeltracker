@@ -87,7 +87,7 @@ if strategy == "Wheel Strategy":
         else:
             selected = st.selectbox("Select Put to Assign", puts.index)
             row = puts.loc[selected]
-            assigned_price = st.number_input("Assigned Price", value=row["Strike"], format="%.2f")
+            assigned_price = st.number_input("Assigned Price", value=float(row["Strike"]), format="%.2f")
             current_price = get_current_price(row["Ticker"])
             qty = int(row["Qty"])
             shares_owned = qty * 100
@@ -145,21 +145,24 @@ if strategy == "Wheel Strategy":
         else:
             idx = st.selectbox("Select Covered Call", covered_calls.index)
             row = covered_calls.loc[idx]
-            ticker = row["Ticker"]
-            qty = int(row["Qty"])
-            call_strike = float(row["Strike"])
-            cc_credit = float(row["Credit Collected"])
-            assigned_price = float(row["Assigned Price"])
-            put = df[(df["Strategy"] == "Wheel Strategy") & (df["Process"] == "Sell Put") & (df["Ticker"] == ticker)].sort_values("Date", ascending=False).head(1)
-            put_credit = float(put["Credit Collected"].values[0]) if not put.empty else 0
-            shares_owned = qty * 100
-            capital_gain = (call_strike - assigned_price) * shares_owned
-            total_credit = (put_credit + cc_credit) * qty * 100
-            final_pl = capital_gain + total_credit
-            sheet.update_cell(idx + 2, df.columns.get_loc("Result") + 1, "Called Away")
-            sheet.update_cell(idx + 2, df.columns.get_loc("P/L") + 1, round(final_pl, 2))
-            st.success(f"✅ Wheel finalized. Total P/L: ${round(final_pl, 2):,.2f}")
-            st.rerun()
+            try:
+                ticker = row["Ticker"]
+                qty = int(row["Qty"])
+                call_strike = float(row["Strike"])
+                cc_credit = float(row["Credit Collected"])
+                assigned_price = float(row["Assigned Price"])
+                put = df[(df["Strategy"] == "Wheel Strategy") & (df["Process"] == "Sell Put") & (df["Ticker"] == ticker)].sort_values("Date", ascending=False).head(1)
+                put_credit = float(put["Credit Collected"].values[0]) if not put.empty else 0
+                shares_owned = qty * 100
+                capital_gain = (call_strike - assigned_price) * shares_owned
+                total_credit = (put_credit + cc_credit) * qty * 100
+                final_pl = capital_gain + total_credit
+                sheet.update_cell(idx + 2, df.columns.get_loc("Result") + 1, "Called Away")
+                sheet.update_cell(idx + 2, df.columns.get_loc("P/L") + 1, round(final_pl, 2))
+                st.success(f"✅ Wheel finalized. Total P/L: ${round(final_pl, 2):,.2f}")
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Error finalizing: {e}")
 
 # --- Chart ---
 st.subheader("\U0001F4CB Current Trades")
