@@ -104,7 +104,6 @@ if strategy == "Wheel Strategy":
                         sheet.update_cell(assigned_row + 2, df.columns.get_loc("Assigned Price") + 1, assigned_price)
                         st.success("✅ Assignment recorded. Ready for covered call.")
 
-                        # Optionally log assignment as a new row
                         row = [
                             "Wheel Strategy", "Assignment", ticker, date.today().strftime("%Y-%m-%d"), strike, delta,
                             dte, credit, qty, expiration, "Assigned", assigned_price, current_price, f"Assignment from row {assigned_row}"  
@@ -116,16 +115,15 @@ if strategy == "Wheel Strategy":
         st.subheader("Covered Call Entry")
         assigned = df[
             (df["Strategy"].str.strip().str.lower() == "wheel strategy") &
-            (df["Process"].str.strip().str.lower() == "sell put") &
-            (df["Result"].str.strip().str.lower() == "assigned")
+            (df["Process"].str.strip().str.lower() == "assignment")
         ]
         if assigned.empty:
             st.warning("No assigned positions available to sell a covered call.")
         else:
             assigned_row = st.selectbox("Select Assigned Position", assigned.index)
             ticker = assigned.loc[assigned_row, "Ticker"]
+            qty = assigned.loc[assigned_row, "Qty"]
             assigned_price = assigned.loc[assigned_row, "Assigned Price"]
-            cost_basis = assigned_price
             current_price = get_current_price(ticker)
 
             with st.form("covered_call_form"):
@@ -139,7 +137,7 @@ if strategy == "Wheel Strategy":
                     row = [
                         "Wheel Strategy", "Covered Call", ticker, date.today().strftime("%Y-%m-%d"), cc_strike, "", "",
                         cc_credit, qty, cc_expiration.strftime("%Y-%m-%d"),
-                        result, current_price, notes
+                        result, assigned_price, current_price, notes
                     ]
                     sheet.append_row(row)
                     st.success("✅ Covered Call entry saved.")
