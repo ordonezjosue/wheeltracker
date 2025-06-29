@@ -31,6 +31,7 @@ def get_current_price(ticker):
 try:
     data = sheet.get_all_records()
     df = pd.DataFrame(data)
+    df = df.loc[:, df.columns != '']  # Drop unnamed columns
     df.columns = pd.Index([str(col).strip() for col in df.columns])
 except Exception as e:
     st.error(f"❌ Failed to load data: {e}")
