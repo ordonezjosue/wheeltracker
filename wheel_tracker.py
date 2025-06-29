@@ -3,7 +3,7 @@ import pandas as pd
 import gspread
 import yfinance as yf
 from oauth2client.service_account import ServiceAccountCredentials
-from datetime import date
+from datetime import date, timedelta
 import json
 
 st.set_page_config(page_title="Wheel Strategy Tracker", layout="wide")
@@ -50,11 +50,12 @@ if strategy == "Wheel Strategy":
             date_entry = st.date_input("Date", value=date.today())
             ticker = st.text_input("Ticker", value="SPY").upper()
             dte = st.number_input("Days to Expiration (DTE)", step=1)
+            expiration = date_entry + timedelta(days=int(dte)) if dte else date.today()
             strike = st.number_input("Strike Price", step=0.5)
             delta = st.number_input("Delta (Optional)", step=0.01)
             credit = st.number_input("Credit Collected (excl. fees)", step=0.01)
             qty = st.number_input("Contracts (Qty)", step=1, value=1)
-            expiration = st.date_input("Expiration Date")
+            expiration_input = st.date_input("Expiration Date", value=expiration)
             current_price = get_current_price(ticker)
             notes = st.text_area("Notes")
             submit = st.form_submit_button("Save Entry")
@@ -62,7 +63,7 @@ if strategy == "Wheel Strategy":
             if submit:
                 row = [
                     "Wheel Strategy", "Sell Put", ticker, date_entry.strftime("%Y-%m-%d"), strike, delta,
-                    dte, credit, qty, expiration.strftime("%Y-%m-%d"),
+                    dte, credit, qty, expiration_input.strftime("%Y-%m-%d"),
                     "Open", current_price, notes
                 ]
                 sheet.append_row([str(x) for x in row])
@@ -110,6 +111,10 @@ if strategy == "Wheel Strategy":
                         ]
                         sheet.append_row([str(x) for x in row])
                         st.rerun()
+
+    # Remaining parts of the script stay unchanged
+    # ...
+
 
     elif step == "Covered Call":
         st.subheader("Covered Call Entry")
