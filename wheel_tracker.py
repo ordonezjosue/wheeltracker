@@ -17,11 +17,6 @@ creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 client = gspread.authorize(creds)
 sheet = client.open(SHEET_NAME).sheet1
 
-# --- Load data ---
-data = sheet.get_all_records()
-df = pd.DataFrame(data)
-df.columns = pd.Index([str(col).strip() for col in df.columns])
-
 # --- Helper to fetch price from Yahoo Finance ---
 @st.cache_data(ttl=3600)
 def get_current_price(ticker):
@@ -31,6 +26,15 @@ def get_current_price(ticker):
         return price
     except:
         return None
+
+# --- Load data safely ---
+try:
+    data = sheet.get_all_records()
+    df = pd.DataFrame(data)
+    df.columns = pd.Index([str(col).strip() for col in df.columns])
+except Exception as e:
+    st.error(f"❌ Failed to load data: {e}")
+    df = pd.DataFrame()
 
 # --- Trade Entry Logic ---
 st.sidebar.header("\u2795 Guided Trade Entry")
@@ -55,20 +59,22 @@ if strategy == "Wheel Strategy":
             submit = st.form_submit_button("Save Entry")
 
             if submit:
-                row = ["Wheel Strategy", "Sell Put", ticker, date_entry.strftime("%Y-%m-%d"), strike, delta,
-                       dte, credit, qty, expiration.strftime("%Y-%m-%d"), "", "", "", "Open", current_price, notes]
+                row = [
+                    "Wheel Strategy", "Sell Put", ticker, date_entry.strftime("%Y-%m-%d"), strike, delta,
+                    dte, credit, qty, expiration.strftime("%Y-%m-%d"),
+                    "Open", current_price, notes
+                ]
                 sheet.append_row(row)
                 st.success("✅ Sell Put entry saved.")
                 st.experimental_rerun()
 
     elif step == "Assignment":
         st.subheader("Assignment Entry")
-        puts = df[(df["Strategy"] == "Wheel Strategy") & (df["Step"] == "Sell Put") & (df["Result"] == "Open")]
+        puts = df[(df["Strategy"] == "Wheel Strategy") & (df["Process"] == "Sell Put") & (df["Result"] == "Open")]
         if puts.empty:
             st.warning("No open puts available for assignment.")
         else:
             assigned_row = st.selectbox("Select Put to Assign", puts.index)
-            assigned_ticker = puts.loc[assigned_row, "Ticker"]
             strike = puts.loc[assigned_row, "Strike"]
             qty = puts.loc[assigned_row, "Qty"]
 
@@ -83,7 +89,7 @@ if strategy == "Wheel Strategy":
 
     elif step == "Covered Call":
         st.subheader("Covered Call Entry")
-        assigned = df[(df["Strategy"] == "Wheel Strategy") & (df["Step"] == "Sell Put") & (df["Result"] == "Assigned")]
+        assigned = df[(df["Strategy"] == "Wheel Strategy") & (df["Process"] == "Sell Put") & (df["Result"] == "Assigned")]
         if assigned.empty:
             st.warning("No assigned positions available to sell a covered call.")
         else:
@@ -101,16 +107,21 @@ if strategy == "Wheel Strategy":
                 notes = st.text_area("Notes")
                 submit = st.form_submit_button("Save Covered Call")
                 if submit:
-                    row = ["Wheel Strategy", "Covered Call", ticker, date.today().strftime("%Y-%m-%d"), cc_strike, "", "", cc_credit,
-                           qty, cc_expiration.strftime("%Y-%m-%d"), assigned_price, cc_strike, cc_credit, result, current_price, notes]
+                    row = [
+                        "Wheel Strategy", "Covered Call", ticker, date.today().strftime("%Y-%m-%d"), cc_strike, "", "",
+                        cc_credit, qty, cc_expiration.strftime("%Y-%m-%d"),
+                        result, current_price, notes
+                    ]
                     sheet.append_row(row)
                     st.success("✅ Covered Call entry saved.")
                     st.experimental_rerun()
 
 # --- Existing Data Viewer ---
 st.subheader("\U0001F4CB Current Trades")
-if not df.empty:
-    st.dataframe(df.sort_values(by="Date", ascending=False).reset_index(drop=True))
+if df.empty or "Date" not in df.columns:
+    st.warning("No valid data found or missing 'Date' column. Please check your sheet format.")
+else:
+    st.dataframe(df.sort_values("Date", ascending=False).reset_index(drop=True))
 
 # --- CSV Download ---
 st.download_button("\U0001F4BE Download All Trades as CSV", df.to_csv(index=False), file_name="wheel_trades.csv")
