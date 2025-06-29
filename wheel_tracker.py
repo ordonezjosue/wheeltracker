@@ -87,7 +87,7 @@ if strategy == "Wheel Strategy":
         else:
             selected = st.selectbox("Select Put to Assign", puts.index)
             row = puts.loc[selected]
-            assigned_price = st.number_input("Assigned Price", value=float(row["Strike"]), format="%.2f")
+            assigned_price = st.number_input("Assigned Price", value=float(str(row["Strike"]).replace("$", "")), format="%.2f")
             current_price = get_current_price(row["Ticker"])
             qty = int(row["Qty"])
             shares_owned = qty * 100
@@ -115,7 +115,7 @@ if strategy == "Wheel Strategy":
             row = assignments.loc[idx]
             ticker = row["Ticker"]
             qty = int(row["Qty"])
-            assigned_price = float(row["Assigned Price"])
+            assigned_price = float(str(row["Assigned Price"]).replace("$", ""))
             cc_strike = st.number_input("Covered Call Strike", step=0.5)
             cc_credit = st.number_input("Credit Collected ($)", step=0.01)
             cc_dte = st.number_input("Days to Expiration", step=1)
@@ -125,7 +125,7 @@ if strategy == "Wheel Strategy":
             submit = st.button("Save Covered Call")
             if submit:
                 put = df[(df["Process"] == "Sell Put") & (df["Ticker"] == ticker)].sort_values("Date", ascending=False).head(1)
-                put_credit = float(put["Credit Collected"].values[0]) if not put.empty else 0
+                put_credit = float(str(put["Credit Collected"].values[0]).replace("$", "")) if not put.empty else 0
                 pl = 0
                 if result == "Called Away":
                     pl = (put_credit + cc_credit) * qty * 100 + (cc_strike - assigned_price) * qty * 100
@@ -148,11 +148,11 @@ if strategy == "Wheel Strategy":
             try:
                 ticker = row["Ticker"]
                 qty = int(row["Qty"])
-                call_strike = float(row["Strike"])
-                cc_credit = float(row["Credit Collected"])
-                assigned_price = float(row["Assigned Price"])
+                call_strike = float(str(row["Strike"]).replace("$", ""))
+                cc_credit = float(str(row["Credit Collected"]).replace("$", ""))
+                assigned_price = float(str(row["Assigned Price"]).replace("$", ""))
                 put = df[(df["Strategy"] == "Wheel Strategy") & (df["Process"] == "Sell Put") & (df["Ticker"] == ticker)].sort_values("Date", ascending=False).head(1)
-                put_credit = float(put["Credit Collected"].values[0]) if not put.empty else 0
+                put_credit = float(str(put["Credit Collected"].values[0]).replace("$", "")) if not put.empty else 0
                 shares_owned = qty * 100
                 capital_gain = (call_strike - assigned_price) * shares_owned
                 total_credit = (put_credit + cc_credit) * qty * 100
