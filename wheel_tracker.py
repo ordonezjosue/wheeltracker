@@ -94,11 +94,14 @@ if strategy == "Wheel Strategy":
                 credit = puts.loc[assigned_row, "Credit Collected"]
                 qty = puts.loc[assigned_row, "Qty"]
                 expiration = puts.loc[assigned_row, "Expiration"]
-                notes = puts.loc[assigned_row, "Notes"]
                 current_price = get_current_price(ticker)
+                assigned_price = 0.0
+
+                if "Assigned Price" in puts.columns:
+                    assigned_price = puts.loc[assigned_row, "Assigned Price"]
 
                 with st.form("assignment_form"):
-                    assigned_price = st.number_input("Assigned Price", value=strike)
+                    assigned_price = st.number_input("Assigned Price", value=assigned_price or strike)
                     submit = st.form_submit_button("Save Assignment")
                     if submit:
                         sheet.update_cell(assigned_row + 2, df.columns.get_loc("Result") + 1, "Assigned")
@@ -112,8 +115,8 @@ if strategy == "Wheel Strategy":
                         sheet.append_row([str(x) for x in row])
                         st.rerun()
 
-    # Remaining parts of the script stay unchanged
-    # ...
+    # Additional logic for Covered Call and Called Away would follow here
+
 
 
     elif step == "Covered Call":
