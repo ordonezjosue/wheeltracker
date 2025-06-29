@@ -147,8 +147,8 @@ if strategy == "Wheel Strategy":
                             (df["Process"] == "Sell Put")
                         ].sort_values("Date", ascending=False).head(1)
                         if not matching_put.empty:
-                            put_credit = float(matching_put["Credit Collected"].values[0]) * qty
-                            pl = put_credit + (cc_credit * qty) + ((cc_strike - assigned_price) * qty * 100)
+                            put_credit = float(matching_put["Credit Collected"].values[0]) * qty * 100
+                            pl = put_credit + (cc_credit * qty * 100) + ((cc_strike - assigned_price) * qty * 100)
                     row = [
                         "Wheel Strategy", "Covered Call", ticker, date.today().strftime("%Y-%m-%d"), cc_strike, "", "",
                         cc_credit, qty, cc_expiration.strftime("%Y-%m-%d"),
@@ -183,16 +183,14 @@ if strategy == "Wheel Strategy":
                 (df["Date"] < row_data["Date"])
             ].sort_values("Date", ascending=False).head(1)
             if not matching_put.empty:
-                put_credit = float(matching_put["Credit Collected"].values[0]) * qty
-            final_pl = round(put_credit + (cc_credit * qty) + ((cc_strike - assigned_price) * qty * 100), 2)
+                put_credit = float(matching_put["Credit Collected"].values[0]) * qty * 100
+            final_pl = round(put_credit + (cc_credit * qty * 100) + ((cc_strike - assigned_price) * qty * 100), 2)
             with st.form("finalize_wheel"):
                 dte = st.number_input("Days to Expiration (DTE)", step=1, value=30)
                 expiration = date.today() + timedelta(days=int(dte))
                 st.write(f"**Put Credit:** ${put_credit:.2f}")
-                st.write(f"**Covered Call Credit:** ${cc_credit * qty:.2f}")
-                st.write(f"**Assigned Price:** ${assigned_price:.2f}")
-                st.write(f"**Call Strike (Shares Called Away):** ${cc_strike:.2f}")
-                st.write(f"**Capital Appreciation:** ${((cc_strike - assigned_price) * qty * 100):.2f}")
+                st.write(f"**Covered Call Credit:** ${cc_credit * qty * 100:.2f}")
+                st.write(f"**Capital Appreciation:** ${(cc_strike - assigned_price) * qty * 100:.2f}")
                 st.write(f"### Final P/L for {ticker}: ${final_pl:.2f}")
                 finalize = st.form_submit_button("Finalize and Record")
                 if finalize:
@@ -221,7 +219,7 @@ else:
                     (df["Date"] < row["Date"])
                 ].sort_values("Date", ascending=False).head(1)
                 put_credit = float(put_row["Credit Collected"].values[0]) if not put_row.empty else 0.0
-                pl = (put_credit * qty) + (cc_credit * qty) + ((cc_strike - assigned_price) * qty * 100)
+                pl = (put_credit * qty * 100) + (cc_credit * qty * 100) + ((cc_strike - assigned_price) * qty * 100)
                 df.at[idx, "P/L"] = round(pl, 2)
             except Exception as e:
                 df.at[idx, "P/L"] = "Error"
