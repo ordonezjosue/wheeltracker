@@ -71,22 +71,27 @@ if strategy == "Wheel Strategy":
 
     elif step == "Assignment":
         st.subheader("Assignment Entry")
-        puts = df[(df["Strategy"] == "Wheel Strategy") & (df["Process"] == "Sell Put") & (df["Result"] == "Open")]
-        if puts.empty:
-            st.warning("No open puts available for assignment.")
-        else:
-            assigned_row = st.selectbox("Select Put to Assign", puts.index)
-            strike = puts.loc[assigned_row, "Strike"]
-            qty = puts.loc[assigned_row, "Qty"]
+        required_cols = {"Strategy", "Process", "Result"}
 
-            with st.form("assignment_form"):
-                assigned_price = st.number_input("Assigned Price", value=strike)
-                submit = st.form_submit_button("Save Assignment")
-                if submit:
-                    sheet.update_cell(assigned_row + 2, df.columns.get_loc("Result") + 1, "Assigned")
-                    sheet.update_cell(assigned_row + 2, df.columns.get_loc("Assigned Price") + 1, assigned_price)
-                    st.success("✅ Assignment recorded. Ready for covered call.")
-                    st.experimental_rerun()
+        if df.empty or not required_cols.issubset(df.columns):
+            st.warning("Missing required columns in your sheet (Strategy, Process, Result). Please check your header row.")
+        else:
+            puts = df[(df["Strategy"] == "Wheel Strategy") & (df["Process"] == "Sell Put") & (df["Result"] == "Open")]
+            if puts.empty:
+                st.warning("No open puts available for assignment.")
+            else:
+                assigned_row = st.selectbox("Select Put to Assign", puts.index)
+                strike = puts.loc[assigned_row, "Strike"]
+                qty = puts.loc[assigned_row, "Qty"]
+
+                with st.form("assignment_form"):
+                    assigned_price = st.number_input("Assigned Price", value=strike)
+                    submit = st.form_submit_button("Save Assignment")
+                    if submit:
+                        sheet.update_cell(assigned_row + 2, df.columns.get_loc("Result") + 1, "Assigned")
+                        sheet.update_cell(assigned_row + 2, df.columns.get_loc("Assigned Price") + 1, assigned_price)
+                        st.success("✅ Assignment recorded. Ready for covered call.")
+                        st.experimental_rerun()
 
     elif step == "Covered Call":
         st.subheader("Covered Call Entry")
