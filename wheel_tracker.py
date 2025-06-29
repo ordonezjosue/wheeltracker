@@ -6,7 +6,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 from datetime import date, timedelta
 import json
 
-st.set_page_config(page_title="Wheel Strategy Tracker", layout="wide")
+st.set_page_config(page_title="WWheel Strategy Tracker", layout="wide")
 st.title("\U0001F6DE Wheel Strategy Tracker (Guided Entry)")
 
 # --- Google Sheets Setup ---
