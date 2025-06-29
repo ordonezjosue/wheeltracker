@@ -7,7 +7,7 @@ from datetime import date, timedelta
 import json
 
 st.set_page_config(page_title="Wheel Strategy Tracker", layout="wide")
-st.title("\U0001F6DE Wheel Strategy Tracker (Guided Entry)")
+st.title("\U0001F6DE ThetaFlowz Tracker (Guided Entry)")
 
 # --- Google Sheets Setup ---
 SHEET_NAME = "Wheel Strategy Trades"
