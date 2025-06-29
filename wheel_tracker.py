@@ -67,7 +67,7 @@ if strategy == "Wheel Strategy":
                 ]
                 sheet.append_row(row)
                 st.success("✅ Sell Put entry saved.")
-                st.experimental_rerun()
+                st.rerun()
 
     elif step == "Assignment":
         st.subheader("Assignment Entry")
@@ -76,13 +76,25 @@ if strategy == "Wheel Strategy":
         if df.empty or not required_cols.issubset(df.columns):
             st.warning("Missing required columns in your sheet (Strategy, Process, Result). Please check your header row.")
         else:
-            puts = df[(df["Strategy"] == "Wheel Strategy") & (df["Process"] == "Sell Put") & (df["Result"] == "Open")]
+            puts = df[
+                (df["Strategy"].str.strip().str.lower() == "wheel strategy") &
+                (df["Process"].str.strip().str.lower() == "sell put") &
+                (df["Result"].str.strip().str.lower() == "open")
+            ]
             if puts.empty:
                 st.warning("No open puts available for assignment.")
             else:
                 assigned_row = st.selectbox("Select Put to Assign", puts.index)
+                ticker = puts.loc[assigned_row, "Ticker"]
+                date_entry = puts.loc[assigned_row, "Date"]
                 strike = puts.loc[assigned_row, "Strike"]
+                delta = puts.loc[assigned_row, "Delta"]
+                dte = puts.loc[assigned_row, "DTE"]
+                credit = puts.loc[assigned_row, "Credit Collected"]
                 qty = puts.loc[assigned_row, "Qty"]
+                expiration = puts.loc[assigned_row, "Expiration"]
+                notes = puts.loc[assigned_row, "Notes"]
+                current_price = get_current_price(ticker)
 
                 with st.form("assignment_form"):
                     assigned_price = st.number_input("Assigned Price", value=strike)
@@ -91,11 +103,22 @@ if strategy == "Wheel Strategy":
                         sheet.update_cell(assigned_row + 2, df.columns.get_loc("Result") + 1, "Assigned")
                         sheet.update_cell(assigned_row + 2, df.columns.get_loc("Assigned Price") + 1, assigned_price)
                         st.success("✅ Assignment recorded. Ready for covered call.")
-                        st.experimental_rerun()
+
+                        # Optionally log assignment as a new row
+                        row = [
+                            "Wheel Strategy", "Assignment", ticker, date.today().strftime("%Y-%m-%d"), strike, delta,
+                            dte, credit, qty, expiration, "Assigned", assigned_price, current_price, f"Assignment from row {assigned_row}"  
+                        ]
+                        sheet.append_row(row)
+                        st.rerun()
 
     elif step == "Covered Call":
         st.subheader("Covered Call Entry")
-        assigned = df[(df["Strategy"] == "Wheel Strategy") & (df["Process"] == "Sell Put") & (df["Result"] == "Assigned")]
+        assigned = df[
+            (df["Strategy"].str.strip().str.lower() == "wheel strategy") &
+            (df["Process"].str.strip().str.lower() == "sell put") &
+            (df["Result"].str.strip().str.lower() == "assigned")
+        ]
         if assigned.empty:
             st.warning("No assigned positions available to sell a covered call.")
         else:
@@ -120,7 +143,7 @@ if strategy == "Wheel Strategy":
                     ]
                     sheet.append_row(row)
                     st.success("✅ Covered Call entry saved.")
-                    st.experimental_rerun()
+                    st.rerun()
 
 # --- Existing Data Viewer ---
 st.subheader("\U0001F4CB Current Trades")
