@@ -42,7 +42,7 @@ st.sidebar.header("\u2795 Guided Trade Entry")
 strategy = st.sidebar.selectbox("Select Strategy", ["Select", "Wheel Strategy", "Put Credit Spread", "Covered Call"])
 
 if strategy == "Wheel Strategy":
-    step = st.sidebar.selectbox("Step in the Wheel", ["Select", "Sell Put", "Assignment", "Covered Call"])
+    step = st.sidebar.selectbox("Step in the Wheel", ["Select", "Sell Put", "Assignment", "Covered Call", "Called Away"])
 
     if step == "Sell Put":
         st.subheader("Sell Put Entry")
@@ -144,12 +144,43 @@ if strategy == "Wheel Strategy":
                     st.success("✅ Covered Call entry saved.")
                     st.rerun()
 
+    elif step == "Called Away":
+        st.subheader("Shares Called Away")
+        cc_called = df[
+            (df["Strategy"].str.strip().str.lower() == "wheel strategy") &
+            (df["Process"].str.strip().str.lower() == "covered call") &
+            (df["Result"].str.strip().str.lower() == "called away")
+        ]
+        if cc_called.empty:
+            st.warning("No shares called away found.")
+        else:
+            st.dataframe(cc_called)
+
 # --- Existing Data Viewer ---
 st.subheader("\U0001F4CB Current Trades")
 if df.empty or "Date" not in df.columns:
     st.warning("No valid data found or missing 'Date' column. Please check your sheet format.")
 else:
-    st.dataframe(df.sort_values("Date", ascending=False).reset_index(drop=True))
+    df["P/L"] = 0.0
+    for idx, row in df.iterrows():
+        if row["Process"] == "Covered Call" and row["Result"].lower() == "called away":
+            try:
+                assigned_price = float(row["Assigned Price"])
+                cc_credit = float(row["Credit Collected"])
+                put_credit = df[
+                    (df["Ticker"] == row["Ticker"]) &
+                    (df["Process"] == "Sell Put") &
+                    (df["Date"] < row["Date"])
+                ]["Credit Collected"].max()
+                put_credit = float(put_credit) if pd.notna(put_credit) else 0.0
+                strike = float(row["Strike"])
+                pl = put_credit + cc_credit + (float(row["Strike"]) - assigned_price)
+                df.at[idx, "P/L"] = round(pl, 2)
+            except:
+                df.at[idx, "P/L"] = "Error"
+
+    display_df = df.drop(columns=["Notes"], errors="ignore")
+    st.dataframe(display_df.sort_values("Date", ascending=False).reset_index(drop=True))
 
 # --- CSV Download ---
 st.download_button("\U0001F4BE Download All Trades as CSV", df.to_csv(index=False), file_name="wheel_trades.csv")
