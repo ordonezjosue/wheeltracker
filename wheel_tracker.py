@@ -65,7 +65,7 @@ if strategy == "Wheel Strategy":
                     dte, credit, qty, expiration.strftime("%Y-%m-%d"),
                     "Open", current_price, notes
                 ]
-                sheet.append_row(row)
+                sheet.append_row([str(x) for x in row])
                 st.success("✅ Sell Put entry saved.")
                 st.rerun()
 
@@ -108,7 +108,7 @@ if strategy == "Wheel Strategy":
                             "Wheel Strategy", "Assignment", ticker, date.today().strftime("%Y-%m-%d"), strike, delta,
                             dte, credit, qty, expiration, "Assigned", assigned_price, current_price, f"Assignment from row {assigned_row}"
                         ]
-                        sheet.append_row(row)
+                        sheet.append_row([str(x) for x in row])
                         st.rerun()
 
     elif step == "Covered Call":
@@ -140,7 +140,7 @@ if strategy == "Wheel Strategy":
                         cc_credit, qty, cc_expiration.strftime("%Y-%m-%d"),
                         result, assigned_price, current_price, notes
                     ]
-                    sheet.append_row(row)
+                    sheet.append_row([str(x) for x in row])
                     st.success("✅ Covered Call entry saved.")
                     st.rerun()
 
