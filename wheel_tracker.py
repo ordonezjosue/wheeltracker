@@ -52,13 +52,22 @@ st.sidebar.header("➕ Guided Trade Entry")
 strategy = st.sidebar.selectbox("Select Strategy", ["Select", "Wheel Strategy"])
 
 if strategy == "Wheel Strategy":
+    unique_tickers = sorted(df["Ticker"].dropna().unique())
+    ticker_option = st.sidebar.selectbox("Select Ticker or Start New", ["New"] + unique_tickers)
+
+    if ticker_option == "New":
+        selected_ticker = st.sidebar.text_input("Enter New Ticker").upper()
+    else:
+        selected_ticker = ticker_option
+        df = df[df["Ticker"] == selected_ticker]
+
     step = st.sidebar.selectbox("Step in the Wheel", ["Select", "Sell Put", "Assignment", "Covered Call", "Called Away"])
 
     if step == "Sell Put":
         st.subheader("Sell Put Entry")
         with st.form("sell_put_form"):
             date_entry = st.date_input("Date", value=date.today())
-            ticker = st.text_input("Ticker", value="SPY").upper()
+            ticker = selected_ticker
             dte = st.number_input("Days to Expiration (DTE)", step=1)
             expiration = date_entry + timedelta(days=int(dte))
             strike = st.number_input("Strike Price ($)", step=0.5, format="%.2f")
