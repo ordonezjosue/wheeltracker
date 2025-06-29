@@ -37,6 +37,16 @@ except Exception as e:
     st.error(f"❌ Failed to load data: {e}")
     df = pd.DataFrame()
 
+# Ensure required columns exist
+required_columns = [
+    "Strategy", "Process", "Ticker", "Date", "Strike", "Delta", "DTE", "Credit Collected",
+    "Qty", "Expiration", "Result", "Assigned Price", "Current Price at time", "P/L", "Shares Owned", "Notes"
+]
+existing_columns = df.columns.tolist()
+for col in required_columns:
+    if col not in existing_columns:
+        df[col] = ""
+
 # --- Trade Entry Logic ---
 st.sidebar.header("➕ Guided Trade Entry")
 strategy = st.sidebar.selectbox("Select Strategy", ["Select", "Wheel Strategy"])
@@ -63,7 +73,7 @@ if strategy == "Wheel Strategy":
                 row = [
                     "Wheel Strategy", "Sell Put", ticker, date_entry.strftime("%Y-%m-%d"), strike, delta,
                     dte, credit, qty, expiration.strftime("%Y-%m-%d"),
-                    "Open", current_price, "", notes
+                    "Open", current_price, "", "", notes
                 ]
                 sheet.append_row([str(x) for x in row])
                 st.success("✅ Sell Put entry saved.")
@@ -79,14 +89,17 @@ if strategy == "Wheel Strategy":
             row = puts.loc[selected]
             assigned_price = st.number_input("Assigned Price", value=row["Strike"], format="%.2f")
             current_price = get_current_price(row["Ticker"])
+            qty = int(row["Qty"])
+            shares_owned = qty * 100
             submit = st.button("Save Assignment")
             if submit:
                 sheet.update_cell(selected + 2, df.columns.get_loc("Result") + 1, "Assigned")
                 sheet.update_cell(selected + 2, df.columns.get_loc("Assigned Price") + 1, assigned_price)
+                sheet.update_cell(selected + 2, df.columns.get_loc("Shares Owned") + 1, shares_owned)
                 row_data = [
                     "Wheel Strategy", "Assignment", row["Ticker"], date.today().strftime("%Y-%m-%d"), row["Strike"], row["Delta"],
-                    row["DTE"], row["Credit Collected"], row["Qty"], row["Expiration"], "Assigned",
-                    assigned_price, current_price, ""
+                    row["DTE"], row["Credit Collected"], qty, row["Expiration"], "Assigned",
+                    assigned_price, current_price, "", shares_owned, ""
                 ]
                 sheet.append_row([str(x) for x in row_data])
                 st.success("✅ Assignment saved. Ready to sell covered calls.")
@@ -118,33 +131,10 @@ if strategy == "Wheel Strategy":
                     pl = (put_credit + cc_credit) * qty * 100 + (cc_strike - assigned_price) * qty * 100
                 call_row = [
                     "Wheel Strategy", "Covered Call", ticker, date.today().strftime("%Y-%m-%d"), cc_strike, "", "", cc_credit,
-                    qty, cc_expiration.strftime("%Y-%m-%d"), result, assigned_price, get_current_price(ticker), round(pl, 2)
+                    qty, cc_expiration.strftime("%Y-%m-%d"), result, assigned_price, get_current_price(ticker), round(pl, 2), "", ""
                 ]
                 sheet.append_row([str(x) for x in call_row])
                 st.success("✅ Covered Call saved.")
-                st.rerun()
-
-    elif step == "Called Away":
-        st.subheader("Finalize Wheel Cycle - Called Away")
-        calls = df[(df["Strategy"] == "Wheel Strategy") & (df["Process"] == "Covered Call") & (df["Result"] == "Open")]
-        if calls.empty:
-            st.info("No covered calls to finalize.")
-        else:
-            idx = st.selectbox("Select Covered Call", calls.index)
-            row = calls.loc[idx]
-            ticker = row["Ticker"]
-            qty = int(row["Qty"])
-            strike = float(row["Strike"])
-            assigned_price = float(row["Assigned Price"])
-            cc_credit = float(row["Credit Collected"])
-            put = df[(df["Process"] == "Sell Put") & (df["Ticker"] == ticker) & (df["Date"] < row["Date"])].sort_values("Date", ascending=False).head(1)
-            put_credit = float(put["Credit Collected"].values[0]) if not put.empty else 0
-            final_pl = (put_credit + cc_credit) * qty * 100 + (strike - assigned_price) * qty * 100
-            confirm = st.button("Finalize")
-            if confirm:
-                sheet.update_cell(idx + 2, df.columns.get_loc("Result") + 1, "Called Away")
-                sheet.update_cell(idx + 2, df.columns.get_loc("P/L") + 1, round(final_pl, 2))
-                st.success("✅ Finalized and P/L recorded.")
                 st.rerun()
 
 # --- Chart ---
