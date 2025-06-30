@@ -8,7 +8,7 @@ import json
 import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="ThetaFlowz Tracker", layout="wide")
-st.title("📘 ThetaFlowz Tracker (Guided Entry)")
+st.title("📘 ThetaFlowz Tracker")
 
 # --- Google Sheets Setup ---
 SHEET_NAME = "Wheel Strategy Trades"
