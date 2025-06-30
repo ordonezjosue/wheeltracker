@@ -202,12 +202,17 @@ if not df.empty:
     ax2.plot(df_sorted["Date"], df_sorted["Cumulative P/L"])
     st.pyplot(fig2)
 
-    st.markdown("**📊 Summary Stats**")
-    st.metric("Total Trades", len(df))
-    st.metric("Active Trades", (df["Result"] == "Open").sum())
-    st.metric("Total Profit", f"${df['P/L'].sum():,.2f}")
-    st.metric("Win Rate", f"{(df['P/L'] > 0).mean() * 100:.2f}%")
-    st.metric("Avg P/L per Trade", f"${df['P/L'].mean():.2f}")
+    st.markdown("### 📊 Summary Stats")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("📄 Total Trades", len(df))
+    col2.metric("🔁 Active Trades", (df["Result"] == "Open").sum())
+    col3.metric("💰 Total Profit", f"${df['P/L'].sum():,.2f}")
+
+    col4, col5 = st.columns(2)
+    win_rate = (df['P/L'] > 0).mean() * 100
+    avg_pl = df['P/L'].mean()
+    col4.metric("✅ Win Rate", f"{win_rate:.2f}%")
+    col5.metric("💹 Avg P/L per Trade", f"${avg_pl:.2f}")
 else:
     st.info("No trades found for dashboard analysis.")
 
