@@ -5,6 +5,7 @@ import yfinance as yf
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import date, timedelta
 import json
+import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="ThetaFlowz Tracker", layout="wide")
 st.title("\U0001F6DE ThetaFlowz Tracker (Guided Entry)")
@@ -173,12 +174,61 @@ if strategy == "Wheel Strategy":
             except Exception as e:
                 st.error(f"❌ Error finalizing: {e}")
 
-# --- Chart ---
+# --- Chart Section ---
 st.subheader("\U0001F4CB Current Trades")
 if df.empty:
     st.warning("No trade data available.")
 else:
     df["P/L"] = pd.to_numeric(df.get("P/L", 0), errors="coerce").fillna(0.0)
     st.dataframe(df.drop(columns=["Notes"], errors="ignore"))
+    st.download_button("\U0001F4BE Download All Trades as CSV", df.to_csv(index=False), file_name="wheel_trades.csv")
 
-st.download_button("\U0001F4BE Download All Trades as CSV", df.to_csv(index=False), file_name="wheel_trades.csv")
+# --- Performance Dashboard ---
+st.subheader("📈 Performance Dashboard")
+if not df.empty:
+    df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+    df['P/L'] = pd.to_numeric(df['P/L'], errors='coerce').fillna(0)
+
+    ticker_pl = df.groupby("Ticker")["P/L"].sum().sort_values()
+    st.markdown("**Total P/L by Ticker**")
+    fig1, ax1 = plt.subplots()
+    ticker_pl.plot(kind="barh", ax=ax1)
+    st.pyplot(fig1)
+
+    df_sorted = df.sort_values("Date")
+    df_sorted["Cumulative P/L"] = df_sorted["P/L"].cumsum()
+    st.markdown("**Cumulative P/L Over Time**")
+    fig2, ax2 = plt.subplots()
+    ax2.plot(df_sorted["Date"], df_sorted["Cumulative P/L"])
+    st.pyplot(fig2)
+
+    st.markdown("**📊 Summary Stats**")
+    st.metric("Total Trades", len(df))
+    st.metric("Active Trades", (df["Result"] == "Open").sum())
+    st.metric("Total Profit", f"${df['P/L'].sum():,.2f}")
+    st.metric("Win Rate", f"{(df['P/L'] > 0).mean() * 100:.2f}%")
+    st.metric("Avg P/L per Trade", f"${df['P/L'].mean():.2f}")
+else:
+    st.info("No trades found for dashboard analysis.")
+
+# --- Edit/Delete Section ---
+st.subheader("✏️ Edit or Delete Trades")
+if not df.empty:
+    edit_index = st.selectbox("Select Trade to Edit/Delete", df.index)
+    selected_row = df.loc[edit_index]
+    with st.form("edit_trade_form"):
+        edited = {}
+        for col in df.columns:
+            edited[col] = st.text_input(col, value=str(selected_row[col]))
+        action = st.radio("Action", ["Edit", "Delete"])
+        confirm = st.form_submit_button("Submit")
+        if confirm:
+            row_number = edit_index + 2
+            if action == "Delete":
+                sheet.delete_rows(row_number)
+                st.success("✅ Row deleted.")
+            else:
+                for i, col in enumerate(df.columns):
+                    sheet.update_cell(row_number, i + 1, edited[col])
+                st.success("✅ Row updated.")
+            st.rerun()
