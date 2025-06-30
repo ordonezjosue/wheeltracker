@@ -18,17 +18,16 @@ creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 client = gspread.authorize(creds)
 sheet = client.open(SHEET_NAME).sheet1
 
-# --- Helper to fetch price from Yahoo Finance ---
+# --- Yahoo Finance Price Fetch ---
 @st.cache_data(ttl=3600)
 def get_current_price(ticker):
     try:
         t = yf.Ticker(ticker)
-        price = t.fast_info.get("last_price") or t.info.get("regularMarketPrice")
-        return price
+        return t.fast_info.get("last_price") or t.info.get("regularMarketPrice")
     except:
         return None
 
-# --- Load and clean data ---
+# --- Load Sheet Data Safely ---
 try:
     data = sheet.get_all_records()
     df = pd.DataFrame(data)
@@ -38,7 +37,7 @@ except Exception as e:
     st.error(f"❌ Failed to load data: {e}")
     df = pd.DataFrame()
 
-# Ensure required columns exist
+# --- Ensure Columns Exist ---
 required_columns = [
     "Strategy", "Process", "Ticker", "Date", "Strike", "Delta", "DTE", "Credit Collected",
     "Qty", "Expiration", "Result", "Assigned Price", "Current Price at time", "P/L", "Shares Owned", "Notes"
@@ -48,19 +47,19 @@ for col in required_columns:
     if col not in existing_columns:
         df[col] = ""
 
-# --- Trade Entry Logic ---
+# --- Sidebar Strategy Selection ---
 st.sidebar.header("➕ Guided Trade Entry")
 strategy = st.sidebar.selectbox("Select Strategy", ["Select", "Wheel Strategy", "Put Credit Spread"])
 
+# ============================
+# 🔁 WHEEL STRATEGY WORKFLOW
+# ============================
 if strategy == "Wheel Strategy":
     unique_tickers = sorted(df["Ticker"].dropna().unique())
     ticker_option = st.sidebar.selectbox("Select Ticker or Start New", ["New"] + unique_tickers)
 
-    if ticker_option == "New":
-        selected_ticker = st.sidebar.text_input("Enter New Ticker").upper()
-    else:
-        selected_ticker = ticker_option
-        df = df[df["Ticker"] == selected_ticker]
+    selected_ticker = st.sidebar.text_input("Enter New Ticker").upper() if ticker_option == "New" else ticker_option
+    df = df[df["Ticker"] == selected_ticker] if ticker_option != "New" else df
 
     step = st.sidebar.selectbox("Step in the Wheel", ["Select", "Sell Put", "Assignment", "Covered Call", "Called Away"])
 
@@ -68,20 +67,19 @@ if strategy == "Wheel Strategy":
         st.subheader("Sell Put Entry")
         with st.form("sell_put_form"):
             date_entry = st.date_input("Date", value=date.today())
-            ticker = selected_ticker
             dte = st.number_input("Days to Expiration (DTE)", step=1)
             expiration = date_entry + timedelta(days=int(dte))
-            strike = st.number_input("Strike Price ($)", step=0.5, format="%.2f")
+            strike = st.number_input("Strike Price ($)", step=0.5)
             delta = st.number_input("Delta (Optional)", step=0.01)
-            credit = st.number_input("Credit Collected ($)", step=0.01, format="%.2f")
+            credit = st.number_input("Credit Collected ($)", step=0.01)
             qty = st.number_input("Contracts (Qty)", step=1, value=1)
-            current_price = get_current_price(ticker)
+            current_price = get_current_price(selected_ticker)
             notes = st.text_area("Notes")
             submit = st.form_submit_button("Save Entry")
 
             if submit:
                 row = [
-                    "Wheel Strategy", "Sell Put", ticker, date_entry.strftime("%Y-%m-%d"), strike, delta,
+                    "Wheel Strategy", "Sell Put", selected_ticker, date_entry.strftime("%Y-%m-%d"), strike, delta,
                     dte, credit, qty, expiration.strftime("%Y-%m-%d"),
                     "Open", current_price, "", "", notes
                 ]
@@ -97,7 +95,7 @@ if strategy == "Wheel Strategy":
         else:
             selected = st.selectbox("Select Put to Assign", puts.index)
             row = puts.loc[selected]
-            assigned_price = st.number_input("Assigned Price", value=float(str(row["Strike"]).replace("$", "")), format="%.2f")
+            assigned_price = st.number_input("Assigned Price", value=float(str(row["Strike"])), format="%.2f")
             current_price = get_current_price(row["Ticker"])
             qty = int(row["Qty"])
             shares_owned = qty * 100
@@ -112,7 +110,7 @@ if strategy == "Wheel Strategy":
                     assigned_price, current_price, "", shares_owned, ""
                 ]
                 sheet.append_row([str(x) for x in row_data])
-                st.success("✅ Assignment saved. You now hold shares — ready to sell covered calls.")
+                st.success("✅ Assignment saved. You now hold shares.")
                 st.rerun()
 
     elif step == "Covered Call":
@@ -125,7 +123,7 @@ if strategy == "Wheel Strategy":
             row = assignments.loc[idx]
             ticker = row["Ticker"]
             qty = int(row["Qty"])
-            assigned_price = float(str(row["Assigned Price"]).replace("$", ""))
+            assigned_price = float(str(row["Assigned Price"]))
             cc_strike = st.number_input("Covered Call Strike", step=0.5)
             cc_credit = st.number_input("Credit Collected ($)", step=0.01)
             cc_dte = st.number_input("Days to Expiration", step=1)
@@ -135,7 +133,7 @@ if strategy == "Wheel Strategy":
             submit = st.button("Save Covered Call")
             if submit:
                 put = df[(df["Process"] == "Sell Put") & (df["Ticker"] == ticker)].sort_values("Date", ascending=False).head(1)
-                put_credit = float(str(put["Credit Collected"].values[0]).replace("$", "")) if not put.empty else 0
+                put_credit = float(str(put["Credit Collected"].values[0])) if not put.empty else 0
                 pl = 0
                 if result == "Called Away":
                     pl = (put_credit + cc_credit) * qty * 100 + (cc_strike - assigned_price) * qty * 100
@@ -151,30 +149,61 @@ if strategy == "Wheel Strategy":
         st.subheader("Finalize Wheel Cycle - Called Away")
         covered_calls = df[(df["Strategy"] == "Wheel Strategy") & (df["Process"] == "Covered Call") & (df["Result"] == "Open")]
         if covered_calls.empty:
-            st.warning("No covered calls available to finalize.")
+            st.warning("No covered calls available.")
         else:
             idx = st.selectbox("Select Covered Call", covered_calls.index)
             row = covered_calls.loc[idx]
             try:
                 ticker = row["Ticker"]
                 qty = int(row["Qty"])
-                call_strike = float(str(row["Strike"]).replace("$", ""))
-                cc_credit = float(str(row["Credit Collected"]).replace("$", ""))
-                assigned_price = float(str(row["Assigned Price"]).replace("$", ""))
+                call_strike = float(str(row["Strike"]))
+                cc_credit = float(str(row["Credit Collected"]))
+                assigned_price = float(str(row["Assigned Price"]))
                 put = df[(df["Strategy"] == "Wheel Strategy") & (df["Process"] == "Sell Put") & (df["Ticker"] == ticker)].sort_values("Date", ascending=False).head(1)
-                put_credit = float(str(put["Credit Collected"].values[0]).replace("$", "")) if not put.empty else 0
+                put_credit = float(str(put["Credit Collected"].values[0])) if not put.empty else 0
                 shares_owned = qty * 100
                 capital_gain = (call_strike - assigned_price) * shares_owned
                 total_credit = (put_credit + cc_credit) * qty * 100
                 final_pl = capital_gain + total_credit
                 sheet.update_cell(idx + 2, df.columns.get_loc("Result") + 1, "Called Away")
                 sheet.update_cell(idx + 2, df.columns.get_loc("P/L") + 1, round(final_pl, 2))
-                st.success(f"✅ Wheel finalized. Total P/L: ${round(final_pl, 2):,.2f}")
+                st.success(f"✅ Finalized. P/L: ${round(final_pl, 2):,.2f}")
                 st.rerun()
             except Exception as e:
-                st.error(f"❌ Error finalizing: {e}")
+                st.error(f"❌ Error: {e}")
 
-# --- Current Trades View ---
+# ============================
+# 🔁 PUT CREDIT SPREAD ENTRY
+# ============================
+elif strategy == "Put Credit Spread":
+    st.subheader("Put Credit Spread Entry")
+    with st.form("pcs_form"):
+        date_entry = st.date_input("Date", value=date.today())
+        ticker = st.text_input("Ticker").upper()
+        short_strike = st.number_input("Short Put Strike ($)", step=0.5)
+        long_strike = st.number_input("Long Put Strike ($)", step=0.5)
+        credit = st.number_input("Total Credit Collected ($)", step=0.01)
+        qty = st.number_input("Contracts (Qty)", step=1, value=1)
+        dte = st.number_input("Days to Expiration (DTE)", step=1)
+        expiration = date_entry + timedelta(days=int(dte))
+        delta = st.number_input("Short Strike Delta (optional)", step=0.01)
+        notes = st.text_area("Notes")
+
+        submit = st.form_submit_button("Save PCS Entry")
+
+        if submit:
+            row = [
+                "Put Credit Spread", "Sell PCS", ticker, date_entry.strftime("%Y-%m-%d"),
+                f"{short_strike}/{long_strike}", delta, dte, credit, qty,
+                expiration.strftime("%Y-%m-%d"), "Open", "", get_current_price(ticker), "", "", notes
+            ]
+            sheet.append_row([str(x) for x in row])
+            st.success("✅ Put Credit Spread saved.")
+            st.rerun()
+
+# ============================
+# 📋 TRADE LOG & DASHBOARD
+# ============================
 st.subheader("📋 Current Trades")
 if df.empty:
     st.warning("No trade data available.")
@@ -183,12 +212,9 @@ else:
     st.dataframe(df.drop(columns=["Notes"], errors="ignore"))
     st.download_button("💾 Download All Trades as CSV", df.to_csv(index=False), file_name="wheel_trades.csv")
 
-# --- Performance Dashboard ---
-st.subheader("📈 Performance Dashboard")
-if not df.empty:
+    # Dashboard
+    st.subheader("📈 Performance Dashboard")
     df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
-    df['P/L'] = pd.to_numeric(df['P/L'], errors='coerce').fillna(0)
-
     ticker_pl = df.groupby("Ticker")["P/L"].sum().sort_values()
     st.markdown("**Total P/L by Ticker**")
     fig1, ax1 = plt.subplots()
@@ -202,21 +228,17 @@ if not df.empty:
     ax2.plot(df_sorted["Date"], df_sorted["Cumulative P/L"])
     st.pyplot(fig2)
 
-    st.markdown("### 📊 Summary Stats")
     col1, col2, col3 = st.columns(3)
     col1.metric("📄 Total Trades", len(df))
     col2.metric("🔁 Active Trades", (df["Result"] == "Open").sum())
     col3.metric("💰 Total Profit", f"${df['P/L'].sum():,.2f}")
-
     col4, col5 = st.columns(2)
-    win_rate = (df['P/L'] > 0).mean() * 100
-    avg_pl = df['P/L'].mean()
-    col4.metric("✅ Win Rate", f"{win_rate:.2f}%")
-    col5.metric("💹 Avg P/L per Trade", f"${avg_pl:.2f}")
-else:
-    st.info("No trades found for dashboard analysis.")
+    col4.metric("✅ Win Rate", f"{(df['P/L'] > 0).mean() * 100:.2f}%")
+    col5.metric("💹 Avg P/L per Trade", f"${df['P/L'].mean():.2f}")
 
-# --- Edit/Delete Section ---
+# ============================
+# ✏️ EDIT / DELETE SECTION
+# ============================
 st.subheader("✏️ Edit or Delete Trades")
 if not df.empty:
     edit_index = st.selectbox("Select Trade to Edit/Delete", df.index)
