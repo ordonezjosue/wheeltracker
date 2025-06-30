@@ -8,7 +8,7 @@ import json
 import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="ThetaFlowz Tracker", layout="wide")
-st.title("\U0001F6DE ThetaFlowz Tracker (Guided Entry)")
+st.title("📘 ThetaFlowz Tracker (Guided Entry)")
 
 # --- Google Sheets Setup ---
 SHEET_NAME = "Wheel Strategy Trades"
@@ -28,7 +28,7 @@ def get_current_price(ticker):
     except:
         return None
 
-# --- Load data safely ---
+# --- Load and clean data ---
 try:
     data = sheet.get_all_records()
     df = pd.DataFrame(data)
@@ -103,23 +103,23 @@ if strategy == "Wheel Strategy":
             shares_owned = qty * 100
             submit = st.button("Save Assignment")
             if submit:
-                sheet.update_cell(selected + 2, df.columns.get_loc("Result") + 1, "Assigned")
+                sheet.update_cell(selected + 2, df.columns.get_loc("Result") + 1, "Shares")
                 sheet.update_cell(selected + 2, df.columns.get_loc("Assigned Price") + 1, assigned_price)
                 sheet.update_cell(selected + 2, df.columns.get_loc("Shares Owned") + 1, shares_owned)
                 row_data = [
                     "Wheel Strategy", "Assignment", row["Ticker"], date.today().strftime("%Y-%m-%d"), row["Strike"], row["Delta"],
-                    row["DTE"], row["Credit Collected"], qty, row["Expiration"], "Assigned",
+                    row["DTE"], row["Credit Collected"], qty, row["Expiration"], "Shares",
                     assigned_price, current_price, "", shares_owned, ""
                 ]
                 sheet.append_row([str(x) for x in row_data])
-                st.success("✅ Assignment saved. Ready to sell covered calls.")
+                st.success("✅ Assignment saved. You now hold shares — ready to sell covered calls.")
                 st.rerun()
 
     elif step == "Covered Call":
         st.subheader("Covered Call Entry")
-        assignments = df[(df["Strategy"] == "Wheel Strategy") & (df["Process"] == "Assignment") & (df["Result"] == "Assigned")]
+        assignments = df[(df["Strategy"] == "Wheel Strategy") & (df["Process"] == "Assignment") & (df["Result"] == "Shares")]
         if assignments.empty:
-            st.warning("No assigned positions found.")
+            st.warning("No share holdings found.")
         else:
             idx = st.selectbox("Select Assigned Position", assignments.index)
             row = assignments.loc[idx]
@@ -174,14 +174,14 @@ if strategy == "Wheel Strategy":
             except Exception as e:
                 st.error(f"❌ Error finalizing: {e}")
 
-# --- Chart Section ---
-st.subheader("\U0001F4CB Current Trades")
+# --- Current Trades View ---
+st.subheader("📋 Current Trades")
 if df.empty:
     st.warning("No trade data available.")
 else:
     df["P/L"] = pd.to_numeric(df.get("P/L", 0), errors="coerce").fillna(0.0)
     st.dataframe(df.drop(columns=["Notes"], errors="ignore"))
-    st.download_button("\U0001F4BE Download All Trades as CSV", df.to_csv(index=False), file_name="wheel_trades.csv")
+    st.download_button("💾 Download All Trades as CSV", df.to_csv(index=False), file_name="wheel_trades.csv")
 
 # --- Performance Dashboard ---
 st.subheader("📈 Performance Dashboard")
