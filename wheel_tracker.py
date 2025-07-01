@@ -135,6 +135,7 @@ if strategy == "Put Credit Spread":
     elif pcs_action == "Buy To Close":
         st.subheader("🔒 Close Existing PCS Position")
 
+        # Load open PCS trades
         open_pcs = df_pcs[df_pcs["Result"] == "Open"]
 
         if open_pcs.empty:
@@ -152,14 +153,19 @@ if strategy == "Put Credit Spread":
 
             if submit:
                 try:
-                    # Clean and parse the credit
+                    # Clean and convert values
                     raw_credit = str(row["Credit Collected"]).replace("$", "").strip()
                     credit = float(raw_credit)
                     qty = int(row["Qty"])
                     pl = (credit - close_price) * qty * 100
 
-                    pcs_tab.update_cell(idx + 2, df_pcs.columns.get_loc("Result") + 1, "Closed")
-                    pcs_tab.update_cell(idx + 2, df_pcs.columns.get_loc("P/L") + 1, round(pl, 2))
+                    # Get column positions in PCS sheet
+                    result_col = df_pcs.columns.get_loc("Result") + 1
+                    pl_col = df_pcs.columns.get_loc("P/L") + 1
+
+                    # Update Google Sheet
+                    pcs_tab.update_cell(idx + 2, result_col, "Closed")
+                    pcs_tab.update_cell(idx + 2, pl_col, round(pl, 2))
 
                     st.success(f"✅ Trade closed. P/L: ${round(pl, 2):,.2f}")
                     st.rerun()
