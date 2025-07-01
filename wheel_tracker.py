@@ -402,7 +402,6 @@ if strategy == "Put Credit Spread":
     st.subheader("Put Credit Spread Entry & Management")
 
     pcs_sheet = client.open(SHEET_NAME).worksheet("PCS")
-
     pcs_data = pcs_sheet.get_all_records()
     df_pcs = pd.DataFrame(pcs_data)
 
@@ -421,7 +420,6 @@ if strategy == "Put Credit Spread":
             expiration = date_entry + timedelta(days=int(dte))
             delta = st.number_input("Short Strike Delta (Optional)", step=0.01)
             notes = st.text_area("Notes")
-
             submit = st.form_submit_button("Save PCS Entry")
 
             if submit:
@@ -439,7 +437,8 @@ if strategy == "Put Credit Spread":
         if open_pcs.empty:
             st.info("No open PCS trades to manage.")
         else:
-            idx = st.selectbox("Select Open PCS Trade", open_pcs.index, format_func=lambda i: f"{i} | {open_pcs.loc[i, 'Ticker']} | {open_pcs.loc[i, 'Expiration']}")
+            idx = st.selectbox("Select Open PCS Trade", open_pcs.index,
+                               format_func=lambda i: f"{i} | {open_pcs.loc[i, 'Ticker']} | {open_pcs.loc[i, 'Expiration']}")
             action = st.selectbox("Action", ["Buy to Close", "Roll Position (Coming Soon)"])
 
             if action == "Buy to Close":
@@ -453,7 +452,6 @@ if strategy == "Put Credit Spread":
                         qty = int(row["Qty"])
                         pl = round((credit - btc_price) * 100 * qty, 2)
 
-                        # Update in Google Sheets
                         row_number = idx + 2  # account for header
                         pcs_sheet.update_cell(row_number, df_pcs.columns.get_loc("Result") + 1, "Closed")
                         pcs_sheet.update_cell(row_number, df_pcs.columns.get_loc("P/L") + 1, pl)
@@ -462,3 +460,4 @@ if strategy == "Put Credit Spread":
                         st.rerun()
                     except Exception as e:
                         st.error(f"Error updating sheet: {e}")
+
