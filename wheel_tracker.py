@@ -153,30 +153,35 @@ if strategy == "Put Credit Spread":
                     st.error(f"❌ Error updating PCS trade: {e}")
 
 # ============================
-# 📋 TRADE LOG
+# 📋 Current Trades
 # ============================
 st.subheader("📋 Current Trades")
+
 if df.empty and df_pcs.empty:
     st.warning("No trade data available.")
 else:
+    # Combine Wheel + PCS
     combined_df = pd.concat([df, df_pcs], ignore_index=True)
-combined_df["P/L"] = pd.to_numeric(combined_df.get("P/L", 0), errors="coerce").fillna(0.0)
 
-# Clean and reorder columns
-column_order = [
-    "Strategy", "Process", "Ticker", "Date", "Strike", "Long Put", "Width", "Delta",
-    "DTE", "Credit Collected", "Qty", "Expiration", "Result", "Current Price at time",
-    "Assigned Price", "P/L", "Shares Owned"
-]
+    # Ensure P/L and Delta are numeric
+    combined_df["P/L"] = pd.to_numeric(combined_df.get("P/L", 0), errors="coerce").fillna(0.0)
+    combined_df["Delta"] = pd.to_numeric(combined_df.get("Delta", ""), errors="coerce")
 
-# Filter out unknown/extra columns and preserve order
-display_df = combined_df[[col for col in column_order if col in combined_df.columns]]
+    # Define final column order
+    column_order = [
+        "Strategy", "Process", "Ticker", "Date", "Strike",
+        "Long Put", "Width", "Delta",
+        "DTE", "Credit Collected", "Qty", "Expiration",
+        "Result", "Current Price at time", "Assigned Price", "P/L", "Shares Owned"
+    ]
 
-# Clean up any None or NaN
-display_df = display_df.fillna("")
+    # Filter and re-order columns
+    display_df = combined_df[[col for col in column_order if col in combined_df.columns]].fillna("")
 
-st.dataframe(display_df)
-st.download_button("💾 Download All Trades as CSV", display_df.to_csv(index=False), file_name="all_trades.csv")
+    # Display + Download
+    st.dataframe(display_df)
+    st.download_button("💾 Download All Trades as CSV", display_df.to_csv(index=False), file_name="all_trades.csv")
+
 
  
 # ============================
