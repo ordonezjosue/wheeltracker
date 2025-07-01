@@ -79,6 +79,22 @@ if not df.empty or not df_pcs.empty:
     win_rate = (combined_df["P/L"] > 0).mean() * 100
     st.metric("✅ Win Rate", f"{win_rate:.2f}%")
 
+# --- Sidebar Strategy Selection ---
+st.sidebar.header("➕ Guided Trade Entry")
+strategy = st.sidebar.selectbox("Select Strategy", ["Select", "Wheel Strategy", "Put Credit Spread"])
+
+if strategy != "Select":
+    if strategy == "Wheel Strategy":
+        # [WHEEL STRATEGY CODE BLOCK HERE - already present in original script]
+        pass
+
+    elif strategy == "Put Credit Spread":
+        # [PUT CREDIT SPREAD CODE BLOCK HERE - already present in original script]
+        pass
+
+# The rest of the code (trade log, edit/delete, etc.) remains unchanged
+# and will continue to show regardless of strategy selection
+
 
 # --- Google Sheets Setup ---
 SHEET_NAME = "Wheel Strategy Trades"
