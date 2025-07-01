@@ -225,7 +225,8 @@ try:
     pcs_tab = client.open(SHEET_NAME).worksheet("PCS")
     pcs_data = pcs_tab.get_all_records()
     df_pcs = pd.DataFrame(pcs_data)
-    # Standardize column names to match dashboard format
+
+    # Standardize column names to match dashboard
     df_pcs = df_pcs.rename(columns={
         "Date": "Date",
         "Ticker": "Ticker",
@@ -248,7 +249,7 @@ except Exception as e:
     st.error(f"❌ Failed to load PCS tab: {e}")
     df_pcs = pd.DataFrame()
 
-# Combine Wheel + PCS trades
+# Combine both Wheel + PCS data
 if df.empty and df_pcs.empty:
     st.warning("No trade data available.")
 else:
@@ -257,22 +258,7 @@ else:
     st.dataframe(combined_df.drop(columns=["Notes"], errors="ignore"))
     st.download_button("💾 Download All Trades as CSV", combined_df.to_csv(index=False), file_name="all_trades.csv")
 
-    # Dashboard
-    st.subheader("📈 Performance Dashboard")
-    combined_df['Date'] = pd.to_datetime(combined_df['Date'], errors='coerce')
-    ticker_pl = combined_df.groupby("Ticker")["P/L"].sum().sort_values()
-    st.markdown("**Total P/L by Ticker**")
-    fig1, ax1 = plt.subplots()
-    ticker_pl.plot(kind="barh", ax=ax1)
-    st.pyplot(fig1)
-
-    df_sorted = combined_df.sort_values("Date")
-    df_sorted["Cumulative P/L"] = df_sorted["P/L"].cumsum()
-    st.markdown("**Cumulative P/L Over Time**")
-    fig2, ax2 = plt.subplots()
-    ax2.plot(df_sorted["Date"], df_sorted["Cumulative P/L"])
-    st.pyplot(fig2)
-
+    # Dashboard Metrics Only (no charts)
     col1, col2, col3 = st.columns(3)
     col1.metric("📄 Total Trades", len(combined_df))
     col2.metric("🔁 Active Trades", (combined_df["Result"] == "Open").sum())
