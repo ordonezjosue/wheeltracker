@@ -99,8 +99,9 @@ for col in required_columns:
 st.sidebar.header("➕ Guided Trade Entry")
 strategy = st.sidebar.selectbox("Select Strategy", ["Select", "Wheel Strategy", "Put Credit Spread"])
 
+
 # ============================
-# 🔁 PCS ENTRY + BUY TO CLOSE
+# 🔁 PUT CREDIT SPREAD ENTRY + BUY TO CLOSE
 # ============================
 if strategy == "Put Credit Spread":
     pcs_action = st.sidebar.selectbox("Select PCS Action", ["New Entry", "Buy To Close", "Roll (Coming Soon)"])
@@ -120,6 +121,7 @@ if strategy == "Put Credit Spread":
             delta = st.number_input("Short Strike Delta (Optional)", step=0.01)
             notes = st.text_area("Notes")
             submit = st.form_submit_button("Save PCS Entry")
+
             if submit:
                 width = round(abs(short_put - long_put), 2)
                 row = [
@@ -130,38 +132,40 @@ if strategy == "Put Credit Spread":
                 st.success("✅ Put Credit Spread saved to PCS tab.")
                 st.rerun()
 
-elif pcs_action == "Buy To Close":
-    st.subheader("🔒 Close Existing PCS Position")
+    elif pcs_action == "Buy To Close":
+        st.subheader("🔒 Close Existing PCS Position")
 
-    open_pcs = df_pcs[df_pcs["Result"] == "Open"]
-    if open_pcs.empty:
-        st.warning("No open PCS trades available.")
-    else:
-        idx = st.selectbox(
-            "Select PCS Trade",
-            open_pcs.index,
-            format_func=lambda i: f"{i} | {open_pcs.loc[i, 'Ticker']} | {open_pcs.loc[i, 'Date']}"
-        )
-        row = open_pcs.loc[idx]
+        open_pcs = df_pcs[df_pcs["Result"] == "Open"]
 
-        close_price = st.number_input("Amount Paid to Close ($)", step=0.01)
-        submit = st.button("Finalize Close")
+        if open_pcs.empty:
+            st.warning("No open PCS trades available.")
+        else:
+            idx = st.selectbox(
+                "Select PCS Trade",
+                open_pcs.index,
+                format_func=lambda i: f"{i} | {open_pcs.loc[i, 'Ticker']} | {open_pcs.loc[i, 'Date']}"
+            )
+            row = open_pcs.loc[idx]
 
-        if submit:
-            try:
-                raw_credit = str(row["Credit Collected"]).replace("$", "").strip()
-                credit = float(raw_credit)
-                qty = int(row["Qty"])
-                pl = (credit - close_price) * qty * 100
+            close_price = st.number_input("Amount Paid to Close ($)", step=0.01)
+            submit = st.button("Finalize Close")
 
-                pcs_tab.update_cell(idx + 2, df_pcs.columns.get_loc("Result") + 1, "Closed")
-                pcs_tab.update_cell(idx + 2, df_pcs.columns.get_loc("P/L") + 1, round(pl, 2))
+            if submit:
+                try:
+                    # Clean and parse the credit
+                    raw_credit = str(row["Credit Collected"]).replace("$", "").strip()
+                    credit = float(raw_credit)
+                    qty = int(row["Qty"])
+                    pl = (credit - close_price) * qty * 100
 
-                st.success(f"✅ Trade closed. P/L: ${round(pl, 2):,.2f}")
-                st.rerun()
+                    pcs_tab.update_cell(idx + 2, df_pcs.columns.get_loc("Result") + 1, "Closed")
+                    pcs_tab.update_cell(idx + 2, df_pcs.columns.get_loc("P/L") + 1, round(pl, 2))
 
-            except Exception as e:
-                st.error(f"❌ Error updating PCS trade: {e}")
+                    st.success(f"✅ Trade closed. P/L: ${round(pl, 2):,.2f}")
+                    st.rerun()
+
+                except Exception as e:
+                    st.error(f"❌ Error updating PCS trade: {e}")
 
 
 # ============================
