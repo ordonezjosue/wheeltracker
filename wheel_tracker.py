@@ -296,28 +296,26 @@ try:
     pcs_data = pcs_tab.get_all_records()
     df_pcs = pd.DataFrame(pcs_data)
 
-    # Standardize column names to match dashboard
-    df_pcs = df_pcs.rename(columns={
-        "Date": "Date",
-        "Ticker": "Ticker",
-        "Short Put": "Strike",
-        "Delta": "Delta",
-        "DTE": "DTE",
-        "Credit Collected": "Credit Collected",
-        "Qty": "Qty",
-        "Expiration": "Expiration",
-        "Notes": "Notes"
-    })
-    df_pcs["Strategy"] = "Put Credit Spread"
-    df_pcs["Process"] = "Sell PCS"
-    df_pcs["Result"] = "Open"
-    df_pcs["Assigned Price"] = ""
-    df_pcs["Current Price at time"] = df_pcs["Ticker"].apply(get_current_price)
-    df_pcs["P/L"] = 0
-    df_pcs["Shares Owned"] = ""
-except Exception as e:
-    st.error(f"❌ Failed to load PCS tab: {e}")
-    df_pcs = pd.DataFrame()
+  # Standardize column names to match dashboard
+df_pcs = df_pcs.rename(columns={
+    "Date": "Date",
+    "Ticker": "Ticker",
+    "Short Put": "Strike",
+    "Delta": "Delta",
+    "DTE": "DTE",
+    "Credit Collected": "Credit Collected",
+    "Qty": "Qty",
+    "Expiration": "Expiration",
+    "Notes": "Notes"
+})
+df_pcs["Strategy"] = "Put Credit Spread"
+df_pcs["Process"] = "Sell PCS"
+df_pcs["Result"] = "Open"
+df_pcs["Assigned Price"] = ""
+df_pcs["Current Price at time"] = df_pcs["Ticker"].apply(get_current_price)
+df_pcs["P/L"] = 0
+df_pcs["Shares Owned"] = ""
+
 
 # Combine both Wheel + PCS data
 if df.empty and df_pcs.empty:
