@@ -219,23 +219,54 @@ elif strategy == "Put Credit Spread":
 # 📋 TRADE LOG & DASHBOARD
 # ============================
 st.subheader("📋 Current Trades")
-if df.empty:
+
+# Load PCS tab
+try:
+    pcs_tab = client.open(SHEET_NAME).worksheet("PCS")
+    pcs_data = pcs_tab.get_all_records()
+    df_pcs = pd.DataFrame(pcs_data)
+    # Standardize column names to match dashboard format
+    df_pcs = df_pcs.rename(columns={
+        "Date": "Date",
+        "Ticker": "Ticker",
+        "Short Put": "Strike",
+        "Delta": "Delta",
+        "DTE": "DTE",
+        "Credit Collected": "Credit Collected",
+        "Qty": "Qty",
+        "Expiration": "Expiration",
+        "Notes": "Notes"
+    })
+    df_pcs["Strategy"] = "Put Credit Spread"
+    df_pcs["Process"] = "Sell PCS"
+    df_pcs["Result"] = "Open"
+    df_pcs["Assigned Price"] = ""
+    df_pcs["Current Price at time"] = df_pcs["Ticker"].apply(get_current_price)
+    df_pcs["P/L"] = 0
+    df_pcs["Shares Owned"] = ""
+except Exception as e:
+    st.error(f"❌ Failed to load PCS tab: {e}")
+    df_pcs = pd.DataFrame()
+
+# Combine Wheel + PCS trades
+if df.empty and df_pcs.empty:
     st.warning("No trade data available.")
 else:
-    df["P/L"] = pd.to_numeric(df.get("P/L", 0), errors="coerce").fillna(0.0)
-    st.dataframe(df.drop(columns=["Notes"], errors="ignore"))
-    st.download_button("💾 Download All Trades as CSV", df.to_csv(index=False), file_name="wheel_trades.csv")
+    combined_df = pd.concat([df, df_pcs], ignore_index=True)
+    combined_df["P/L"] = pd.to_numeric(combined_df.get("P/L", 0), errors="coerce").fillna(0.0)
+    st.dataframe(combined_df.drop(columns=["Notes"], errors="ignore"))
+    st.download_button("💾 Download All Trades as CSV", combined_df.to_csv(index=False), file_name="all_trades.csv")
 
     # Dashboard
     st.subheader("📈 Performance Dashboard")
-    df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
-    ticker_pl = df.groupby("Ticker")["P/L"].sum().sort_values()
+    combined_df['Date'] = pd.to_datetime(combined_df['Date'], errors='coerce')
+    ticker_pl = combined_df.groupby("Ticker")["P/L"].sum().sort_values()
     st.markdown("**Total P/L by Ticker**")
     fig1, ax1 = plt.subplots()
     ticker_pl.plot(kind="barh", ax=ax1)
     st.pyplot(fig1)
 
-    df_sorted = df.sort_values("Date")
+    df_sorted = combined_df.sort_values("Date")
     df_sorted["Cumulative P/L"] = df_sorted["P/L"].cumsum()
     st.markdown("**Cumulative P/L Over Time**")
     fig2, ax2 = plt.subplots()
@@ -243,12 +274,12 @@ else:
     st.pyplot(fig2)
 
     col1, col2, col3 = st.columns(3)
-    col1.metric("📄 Total Trades", len(df))
-    col2.metric("🔁 Active Trades", (df["Result"] == "Open").sum())
-    col3.metric("💰 Total Profit", f"${df['P/L'].sum():,.2f}")
+    col1.metric("📄 Total Trades", len(combined_df))
+    col2.metric("🔁 Active Trades", (combined_df["Result"] == "Open").sum())
+    col3.metric("💰 Total Profit", f"${combined_df['P/L'].sum():,.2f}")
     col4, col5 = st.columns(2)
-    col4.metric("✅ Win Rate", f"{(df['P/L'] > 0).mean() * 100:.2f}%")
-    col5.metric("💹 Avg P/L per Trade", f"${df['P/L'].mean():.2f}")
+    col4.metric("✅ Win Rate", f"{(combined_df['P/L'] > 0).mean() * 100:.2f}%")
+    col5.metric("💹 Avg P/L per Trade", f"${combined_df['P/L'].mean():.2f}")
 
 # ============================
 # ✏️ EDIT / DELETE SECTION
