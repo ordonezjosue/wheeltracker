@@ -174,94 +174,43 @@ if strategy == "Put Credit Spread":
                     st.error(f"❌ Error updating PCS trade: {e}")
 
 # ============================
-# 📤 Upload Tastytrade PCS CSV
+# 📥 Load PCS Tab Safely
 # ============================
-st.subheader("📤 Upload Put Credit Spreads from Tastytrade CSV")
+try:
+    pcs_tab = client.open(SHEET_NAME).worksheet("PCS")
+    pcs_data = pcs_tab.get_all_records()
+    df_pcs = pd.DataFrame(pcs_data)
 
-uploaded_file = st.file_uploader("Upload Tastytrade Activity CSV", type=["csv"])
+    # Define all required PCS columns
+    expected_columns = [
+        "Date", "Ticker", "Short Put", "Delta", "DTE", "Credit Collected", "Qty",
+        "Expiration", "Notes", "Result", "Assigned Price", "Current Price at time",
+        "P/L", "Shares Owned", "Long Put", "Width"
+    ]
 
-if uploaded_file:
-    try:
-        import re
+    # Add missing columns if any
+    for col in expected_columns:
+        if col not in df_pcs.columns:
+            df_pcs[col] = ""
 
-        # Read the uploaded CSV
-        tasty_df = pd.read_csv(uploaded_file)
+    # Ensure numeric columns are valid
+    df_pcs["P/L"] = pd.to_numeric(df_pcs.get("P/L", 0), errors="coerce").fillna(0)
+    df_pcs["Strategy"] = "Put Credit Spread"
+    df_pcs["Process"] = "Sell PCS"
 
-        # Parse option legs from the Description column
-        def parse_description(desc):
-            legs = []
-            for line in desc.split('\n'):
-                match = re.match(
-                    r"(?P<qty>[+-]?\d+)\s+(?P<exp_month>\w+)\s+(?P<exp_day>\d+)\s+(?P<dte>\d+)d\s+(?P<strike>[\d\.]+)\s+(?P<right>Put|Call)\s+(?P<action>STO|BTC|BTO|LTD)",
-                    line.strip()
-                )
-                if match:
-                    leg = match.groupdict()
-                    leg["qty"] = int(leg["qty"])
-                    leg["strike"] = float(leg["strike"])
-                    legs.append(leg)
-            return legs
+    # Only fetch prices if 'Ticker' exists and isn't blank
+    if "Ticker" in df_pcs.columns:
+        df_pcs["Current Price at time"] = df_pcs["Ticker"].apply(get_current_price)
+    else:
+        df_pcs["Current Price at time"] = ""
 
-        # Filter for credit transactions only
-        tasty_df = tasty_df[tasty_df["Price"].astype(str).str.endswith("cr")].copy()
-        tasty_df["parsed_legs"] = tasty_df["Description"].apply(parse_description)
-
-        # Extract valid Put Credit Spreads
-        pcs_trades = []
-        for _, row in tasty_df.iterrows():
-            legs = row["parsed_legs"]
-            if len(legs) == 2:
-                leg1, leg2 = legs
-                if (
-                    leg1["right"] == "Put" and leg2["right"] == "Put"
-                    and ((leg1["qty"] == -1 and leg2["qty"] == 1) or (leg1["qty"] == 1 and leg2["qty"] == -1))
-                ):
-                    short_leg = leg1 if leg1["qty"] == -1 else leg2
-                    long_leg = leg2 if leg2["qty"] == 1 else leg1
-                    try:
-                        credit = float(str(row["Price"]).replace("cr", "").strip())
-                    except ValueError:
-                        continue
-                    pcs_trades.append({
-                        "Date": date.today().strftime("%Y-%m-%d"),  # using today as default
-                        "Ticker": row["Symbol"],
-                        "Short Put": short_leg["strike"],
-                        "Long Put": long_leg["strike"],
-                        "Width": abs(short_leg["strike"] - long_leg["strike"]),
-                        "Credit Collected": credit,
-                        "Qty": abs(short_leg["qty"]),
-                        "DTE": short_leg["dte"],
-                        "Expiration": f"{short_leg['exp_month']} {short_leg['exp_day']}",
-                        "Delta": "",
-                        "Notes": "",
-                        "Result": "Open",
-                        "Assigned Price": "",
-                        "Current Price at time": get_current_price(row["Symbol"]),
-                        "P/L": 0,
-                        "Shares Owned": "",
-                        "Strategy": "Put Credit Spread",
-                        "Process": "Sell PCS"
-                    })
-
-        if not pcs_trades:
-            st.warning("No valid Put Credit Spread trades found.")
-        else:
-            pcs_df = pd.DataFrame(pcs_trades)
-            st.dataframe(pcs_df)
-
-            if st.button("📤 Upload PCS Trades to Tracker"):
-                try:
-                    pcs_sheet = client.open(SHEET_NAME).worksheet("PCS")
-                    for _, row in pcs_df.iterrows():
-                        pcs_sheet.append_row([str(x) for x in row])
-                    st.success("✅ All PCS trades uploaded to Google Sheets.")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"❌ Failed to upload trades: {e}")
-
-    except Exception as e:
-        st.error(f"❌ Error processing CSV: {e}")
-
+except Exception as e:
+    st.error(f"❌ Failed to load PCS tab: {e}")
+    df_pcs = pd.DataFrame(columns=[
+        "Date", "Ticker", "Short Put", "Delta", "DTE", "Credit Collected", "Qty",
+        "Expiration", "Notes", "Result", "Assigned Price", "Current Price at time",
+        "P/L", "Shares Owned", "Long Put", "Width", "Strategy", "Process"
+    ])
 
 
 # ============================
