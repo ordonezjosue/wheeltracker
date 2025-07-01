@@ -296,46 +296,37 @@ try:
     pcs_data = pcs_tab.get_all_records()
     df_pcs = pd.DataFrame(pcs_data)
 
-  # Standardize column names to match dashboard
-df_pcs = df_pcs.rename(columns={
-    "Date": "Date",
-    "Ticker": "Ticker",
-    "Short Put": "Strike",
-    "Delta": "Delta",
-    "DTE": "DTE",
-    "Credit Collected": "Credit Collected",
-    "Qty": "Qty",
-    "Expiration": "Expiration",
-    "Notes": "Notes"
-})
-df_pcs["Strategy"] = "Put Credit Spread"
-df_pcs["Process"] = "Sell PCS"
-df_pcs["Result"] = "Open"
-df_pcs["Assigned Price"] = ""
-df_pcs["Current Price at time"] = df_pcs["Ticker"].apply(get_current_price)
-df_pcs["P/L"] = 0
-df_pcs["Shares Owned"] = ""
-
+    # Standardize column names to match dashboard
+    df_pcs = df_pcs.rename(columns={
+        "Date": "Date",
+        "Ticker": "Ticker",
+        "Short Put": "Strike",
+        "Delta": "Delta",
+        "DTE": "DTE",
+        "Credit Collected": "Credit Collected",
+        "Qty": "Qty",
+        "Expiration": "Expiration",
+        "Notes": "Notes"
+    })
+    df_pcs["Strategy"] = "Put Credit Spread"
+    df_pcs["Process"] = "Sell PCS"
+    df_pcs["Result"] = "Open"
+    df_pcs["Assigned Price"] = ""
+    df_pcs["Current Price at time"] = df_pcs["Ticker"].apply(get_current_price)
+    df_pcs["P/L"] = 0
+    df_pcs["Shares Owned"] = ""
+except Exception as e:
+    st.error(f"❌ Failed to load PCS tab: {e}")
+    df_pcs = pd.DataFrame()
 
 # Combine both Wheel + PCS data
 if df.empty and df_pcs.empty:
     st.warning("No trade data available.")
 else:
-    # ✅ Ensure all df columns exist in df_pcs
-    for col in df.columns:
-        if col not in df_pcs.columns:
-            df_pcs[col] = ""
-
-    # ✅ Align column order
-    df_pcs = df_pcs[df.columns.tolist()]
-
-    # ✅ Concatenate and show
     combined_df = pd.concat([df, df_pcs], ignore_index=True)
     combined_df["P/L"] = pd.to_numeric(combined_df.get("P/L", 0), errors="coerce").fillna(0.0)
-
     st.dataframe(combined_df.drop(columns=["Notes"], errors="ignore"))
     st.download_button("💾 Download All Trades as CSV", combined_df.to_csv(index=False), file_name="all_trades.csv")
-
 
 
 
