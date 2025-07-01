@@ -37,7 +37,6 @@ try:
     pcs_data = pcs_tab.get_all_records()
     df_pcs = pd.DataFrame(pcs_data)
 
-    # Standardize PCS columns
     df_pcs = df_pcs.rename(columns={
         "Date": "Date",
         "Ticker": "Ticker",
@@ -74,26 +73,60 @@ if not df.empty or not df_pcs.empty:
         st.metric("💰 Total Profit", f"${combined_df['P/L'].sum():,.2f}")
     with col2:
         st.metric("🔁 Active Trades", (combined_df["Result"] == "Open").sum())
-        st.metric("💹 Avg P/L per Trade", f"${combined_df['P/L'].mean():.2f}")
+        st.metric("📉 Avg P/L per Trade", f"${combined_df['P/L'].mean():.2f}")
 
     win_rate = (combined_df["P/L"] > 0).mean() * 100
     st.metric("✅ Win Rate", f"{win_rate:.2f}%")
 
 # --- Sidebar Strategy Selection ---
 st.sidebar.header("➕ Guided Trade Entry")
-strategy = st.sidebar.selectbox("Select Strategy", ["Select", "Wheel Strategy", "Put Credit Spread"])
+strategy = st.sidebar.selectbox("Select Strategy", ["Select", "Wheel Strategy", "Put Credit Spread"], key="strategy_select")
 
-if strategy != "Select":
-    if strategy == "Wheel Strategy":
-        # [WHEEL STRATEGY CODE BLOCK HERE - already present in original script]
-        pass
+# ============================
+# 🔁 STRATEGY LOGIC
+# ============================
+if strategy == "Wheel Strategy":
+    st.write("Wheel Strategy Entry Form Placeholder")
 
-    elif strategy == "Put Credit Spread":
-        # [PUT CREDIT SPREAD CODE BLOCK HERE - already present in original script]
-        pass
+elif strategy == "Put Credit Spread":
+    st.subheader("Put Credit Spread Entry")
+    pcs_sheet = client.open(SHEET_NAME).worksheet("PCS")
 
-# The rest of the code (trade log, edit/delete, etc.) remains unchanged
-# and will continue to show regardless of strategy selection
+    with st.form("pcs_form"):
+        date_entry = st.date_input("Date", value=date.today())
+        ticker = st.text_input("Ticker").upper()
+        short_put = st.number_input("Short Put Strike ($)", step=0.5)
+        long_put = st.number_input("Long Put Strike ($)", step=0.5)
+        credit = st.number_input("Total Credit Collected ($)", step=0.01)
+        qty = st.number_input("Contracts (Qty)", step=1, value=1)
+        dte = st.number_input("Days to Expiration (DTE)", step=1)
+        expiration = date_entry + timedelta(days=int(dte))
+        delta = st.number_input("Short Strike Delta (Optional)", step=0.01)
+        notes = st.text_area("Notes")
+
+        submit = st.form_submit_button("Save PCS Entry")
+
+        if submit:
+            width = round(abs(short_put - long_put), 2)
+            row = [
+                date_entry.strftime("%Y-%m-%d"),
+                ticker,
+                dte,
+                expiration.strftime("%Y-%m-%d"),
+                short_put,
+                long_put,
+                width,
+                delta,
+                credit,
+                qty,
+                notes
+            ]
+            pcs_sheet.append_row([str(x) for x in row])
+            st.success("✅ Put Credit Spread saved to PCS tab.")
+            st.rerun()
+
+# (Other non-form logic such as trade log and edit/delete can go here)
+
 
 
 # --- Google Sheets Setup ---
