@@ -323,10 +323,19 @@ except Exception as e:
 if df.empty and df_pcs.empty:
     st.warning("No trade data available.")
 else:
+    # ✅ Fix misaligned columns by matching order before combining
+    df_pcs = df_pcs[df.columns.tolist()]  # Reorder PCS to match Wheel
     combined_df = pd.concat([df, df_pcs], ignore_index=True)
+
+    # Ensure numeric formatting
     combined_df["P/L"] = pd.to_numeric(combined_df.get("P/L", 0), errors="coerce").fillna(0.0)
+
+    # Show trades table without the Notes column
     st.dataframe(combined_df.drop(columns=["Notes"], errors="ignore"))
+
+    # CSV Export
     st.download_button("💾 Download All Trades as CSV", combined_df.to_csv(index=False), file_name="all_trades.csv")
+
 
 
 
