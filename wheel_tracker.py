@@ -284,6 +284,67 @@ elif strategy == "Put Credit Spread":
             st.success("✅ Put Credit Spread saved to PCS tab.")
             st.rerun()
 
+    # --- Manage Existing PCS Position ---
+    st.sidebar.markdown("### ⚙️ Manage Existing PCS Trade")
+    try:
+        pcs_tab = client.open(SHEET_NAME).worksheet("PCS")
+        pcs_data = pcs_tab.get_all_records()
+        df_pcs_all = pd.DataFrame(pcs_data)
+    except Exception as e:
+        st.error(f"❌ Failed to load PCS data: {e}")
+        df_pcs_all = pd.DataFrame()
+
+    if not df_pcs_all.empty:
+        open_trades = df_pcs_all[df_pcs_all["Result"] == "Open"]
+        if open_trades.empty:
+            st.sidebar.info("No open PCS trades found.")
+        else:
+            manage_index = st.sidebar.selectbox(
+                "Select Open PCS Trade",
+                open_trades.index,
+                format_func=lambda i: f"{open_trades.loc[i, 'Date']} | {open_trades.loc[i, 'Ticker']} | {open_trades.loc[i, 'Short Put']}/{open_trades.loc[i, 'Long Put']}"
+            )
+            action = st.sidebar.radio("Action", ["Select", "Sell to Close", "Roll"], horizontal=True)
+
+            if action == "Sell to Close":
+                st.subheader("💼 Sell to Close")
+                selected = open_trades.loc[manage_index]
+                with st.form("close_pcs_form"):
+                    exit_price = st.number_input("Closing Price ($)", step=0.01)
+                    notes = st.text_area("Closing Notes")
+                    confirm_close = st.form_submit_button("Confirm Close")
+
+                    if confirm_close:
+                        credit_received = float(selected["Credit Collected"])
+                        pl = (credit_received - exit_price) * int(selected["Qty"]) * 100
+
+                        # --- Update original trade to closed ---
+                        row_num = manage_index + 2  # +2 for header + 0-indexing
+                        pcs_tab.update_cell(row_num, df_pcs_all.columns.get_loc("Result") + 1, "Closed")
+                        pcs_tab.update_cell(row_num, df_pcs_all.columns.get_loc("P/L") + 1, round(pl, 2))
+
+                        # --- Log new "Sell to Close" row ---
+                        new_row = [
+                            date.today().strftime("%Y-%m-%d"),     # Date
+                            selected["Ticker"],                    # Ticker
+                            selected["DTE"],                       # DTE
+                            selected["Expiration"],                # Expiration
+                            selected["Short Put"],                 # Short Put
+                            selected["Long Put"],                  # Long Put
+                            round(abs(float(selected["Short Put"]) - float(selected["Long Put"])), 2),  # Width
+                            selected["Delta"],                     # Delta
+                            exit_price,                            # Credit Collected (now exit price)
+                            selected["Qty"],                       # Qty
+                            notes,                                 # Notes
+                            "Put Credit Spread",                   # Strategy
+                            "Sell to Close",                       # Process
+                            "Closed",                              # Result
+                            round(pl, 2),                          # P/L
+                            get_current_price(selected["Ticker"]) # Current Price at time
+                        ]
+                        pcs_tab.append_row([str(x) for x in new_row])
+                        st.success(f"✅ Position closed. P/L = ${pl:.2f}")
+                        st.rerun()
 
 # ============================
 # 📋 TRADE LOG & DASHBOARD
