@@ -177,29 +177,43 @@ if strategy == "Wheel Strategy":
 # ============================
 elif strategy == "Put Credit Spread":
     st.subheader("Put Credit Spread Entry")
+
+    # Use the 'PCS' worksheet
+    pcs_sheet = client.open(SHEET_NAME).worksheet("PCS")
+
     with st.form("pcs_form"):
         date_entry = st.date_input("Date", value=date.today())
         ticker = st.text_input("Ticker").upper()
-        short_strike = st.number_input("Short Put Strike ($)", step=0.5)
-        long_strike = st.number_input("Long Put Strike ($)", step=0.5)
+        short_put = st.number_input("Short Put Strike ($)", step=0.5)
+        long_put = st.number_input("Long Put Strike ($)", step=0.5)
         credit = st.number_input("Total Credit Collected ($)", step=0.01)
         qty = st.number_input("Contracts (Qty)", step=1, value=1)
         dte = st.number_input("Days to Expiration (DTE)", step=1)
         expiration = date_entry + timedelta(days=int(dte))
-        delta = st.number_input("Short Strike Delta (optional)", step=0.01)
+        delta = st.number_input("Short Strike Delta (Optional)", step=0.01)
         notes = st.text_area("Notes")
 
         submit = st.form_submit_button("Save PCS Entry")
 
         if submit:
+            width = round(abs(short_put - long_put), 2)
             row = [
-                "Put Credit Spread", "Sell PCS", ticker, date_entry.strftime("%Y-%m-%d"),
-                f"{short_strike}/{long_strike}", delta, dte, credit, qty,
-                expiration.strftime("%Y-%m-%d"), "Open", "", get_current_price(ticker), "", "", notes
+                date_entry.strftime("%Y-%m-%d"),  # Date
+                ticker,                           # Ticker
+                dte,                              # DTE
+                expiration.strftime("%Y-%m-%d"),  # Expiration
+                short_put,                        # Short Put
+                long_put,                         # Long Put
+                width,                            # Width
+                delta,                            # Delta
+                credit,                           # Credit Collected
+                qty,                              # Qty
+                notes                             # Notes
             ]
-            sheet.append_row([str(x) for x in row])
-            st.success("✅ Put Credit Spread saved.")
+            pcs_sheet.append_row([str(x) for x in row])
+            st.success("✅ Put Credit Spread saved to PCS tab.")
             st.rerun()
+
 
 # ============================
 # 📋 TRADE LOG & DASHBOARD
