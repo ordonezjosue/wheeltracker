@@ -5,7 +5,6 @@ import yfinance as yf
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import date, timedelta
 import json
-import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="ThetaFlowz Tracker", layout="wide")
 
@@ -31,31 +30,37 @@ except Exception as e:
     st.error(f"❌ Failed to load Wheel data: {e}")
     df = pd.DataFrame()
 
+# --- Yahoo Finance Price Fetch ---
+@st.cache_data(ttl=3600)
+def get_current_price(ticker):
+    try:
+        t = yf.Ticker(ticker)
+        return t.fast_info.get("last_price") or t.info.get("regularMarketPrice")
+    except:
+        return None
+
 # Load PCS Tab
 try:
     pcs_tab = client.open(SHEET_NAME).worksheet("PCS")
     pcs_data = pcs_tab.get_all_records()
     df_pcs = pd.DataFrame(pcs_data)
 
-    # Standardize PCS columns
     df_pcs = df_pcs.rename(columns={
-        "Date": "Date",
-        "Ticker": "Ticker",
-        "Short Put": "Strike",
-        "Delta": "Delta",
-        "DTE": "DTE",
-        "Credit Collected": "Credit Collected",
-        "Qty": "Qty",
-        "Expiration": "Expiration",
-        "Notes": "Notes"
+        "Date": "Date", "Ticker": "Ticker", "Short Put": "Strike",
+        "Delta": "Delta", "DTE": "DTE", "Credit Collected": "Credit Collected",
+        "Qty": "Qty", "Expiration": "Expiration", "Notes": "Notes"
     })
+
+    for col in ["Result", "Assigned Price", "Current Price at time", "P/L", "Shares Owned", "Long Put", "Width"]:
+        if col not in df_pcs.columns:
+            df_pcs[col] = ""
+
+    df_pcs["Result"] = df_pcs["Result"].replace("", "Open")
+    df_pcs["P/L"] = pd.to_numeric(df_pcs.get("P/L", 0), errors="coerce").fillna(0)
     df_pcs["Strategy"] = "Put Credit Spread"
     df_pcs["Process"] = "Sell PCS"
-    df_pcs["Result"] = df_pcs.get("Result", "Open")
-    df_pcs["Assigned Price"] = ""
-    df_pcs["Current Price at time"] = df_pcs["Ticker"].apply(lambda t: yf.Ticker(t).fast_info.get("last_price"))
-    df_pcs["P/L"] = pd.to_numeric(df_pcs.get("P/L", 0), errors="coerce").fillna(0)
-    df_pcs["Shares Owned"] = ""
+    df_pcs["Current Price at time"] = df_pcs["Ticker"].apply(get_current_price)
+
 except Exception as e:
     st.error(f"❌ Failed to load PCS tab: {e}")
     df_pcs = pd.DataFrame()
@@ -79,47 +84,30 @@ if not df.empty or not df_pcs.empty:
     win_rate = (combined_df["P/L"] > 0).mean() * 100
     st.metric("✅ Win Rate", f"{win_rate:.2f}%")
 
-# --- Yahoo Finance Price Fetch ---
-@st.cache_data(ttl=3600)
-def get_current_price(ticker):
-    try:
-        t = yf.Ticker(ticker)
-        return t.fast_info.get("last_price") or t.info.get("regularMarketPrice")
-    except:
-        return None
-
-# --- Ensure Columns Exist ---
+# Ensure Wheel columns
 required_columns = [
     "Strategy", "Process", "Ticker", "Date", "Strike", "Delta", "DTE", "Credit Collected",
     "Qty", "Expiration", "Result", "Assigned Price", "Current Price at time", "P/L", "Shares Owned", "Notes"
 ]
-existing_columns = df.columns.tolist()
 for col in required_columns:
-    if col not in existing_columns:
+    if col not in df.columns:
         df[col] = ""
 
-# --- Sidebar Strategy Selection ---
+# ============================
+# ➕ SIDEBAR STRATEGY SELECTION
+# ============================
 st.sidebar.header("➕ Guided Trade Entry")
 strategy = st.sidebar.selectbox("Select Strategy", ["Select", "Wheel Strategy", "Put Credit Spread"])
 
 # ============================
-# 🔁 WHEEL STRATEGY WORKFLOW
+# 🔁 PCS ENTRY + BUY TO CLOSE
 # ============================
-if strategy == "Wheel Strategy":
-    # Existing logic (unchanged)
-    ...
-
-# ============================
-# 🔁 PUT CREDIT SPREAD ENTRY + BUY TO CLOSE
-# ============================
-elif strategy == "Put Credit Spread":
+if strategy == "Put Credit Spread":
     pcs_action = st.sidebar.selectbox("Select PCS Action", ["New Entry", "Buy To Close", "Roll (Coming Soon)"])
-
     pcs_sheet = client.open(SHEET_NAME).worksheet("PCS")
 
     if pcs_action == "New Entry":
         st.subheader("Put Credit Spread Entry")
-
         with st.form("pcs_form"):
             date_entry = st.date_input("Date", value=date.today())
             ticker = st.text_input("Ticker").upper()
@@ -131,23 +119,12 @@ elif strategy == "Put Credit Spread":
             expiration = date_entry + timedelta(days=int(dte))
             delta = st.number_input("Short Strike Delta (Optional)", step=0.01)
             notes = st.text_area("Notes")
-
             submit = st.form_submit_button("Save PCS Entry")
-
             if submit:
                 width = round(abs(short_put - long_put), 2)
                 row = [
-                    date_entry.strftime("%Y-%m-%d"),  # Date
-                    ticker,                           # Ticker
-                    dte,                              # DTE
-                    expiration.strftime("%Y-%m-%d"),  # Expiration
-                    short_put,                        # Short Put
-                    long_put,                         # Long Put
-                    width,                            # Width
-                    delta,                            # Delta
-                    credit,                           # Credit Collected
-                    qty,                              # Qty
-                    notes                             # Notes
+                    date_entry.strftime("%Y-%m-%d"), ticker, dte, expiration.strftime("%Y-%m-%d"),
+                    short_put, long_put, width, delta, credit, qty, notes
                 ]
                 pcs_sheet.append_row([str(x) for x in row])
                 st.success("✅ Put Credit Spread saved to PCS tab.")
@@ -155,7 +132,6 @@ elif strategy == "Put Credit Spread":
 
     elif pcs_action == "Buy To Close":
         st.subheader("🔒 Close Existing PCS Position")
-
         open_pcs = df_pcs[df_pcs["Result"] == "Open"]
         if open_pcs.empty:
             st.warning("No open PCS trades available.")
@@ -164,26 +140,22 @@ elif strategy == "Put Credit Spread":
             row = open_pcs.loc[idx]
             close_price = st.number_input("Amount Paid to Close ($)", step=0.01)
             submit = st.button("Finalize Close")
-
             if submit:
                 try:
                     credit = float(row["Credit Collected"])
                     qty = int(row["Qty"])
                     pl = (credit - close_price) * qty * 100
-
                     pcs_tab.update_cell(idx + 2, df_pcs.columns.get_loc("Result") + 1, "Closed")
                     pcs_tab.update_cell(idx + 2, df_pcs.columns.get_loc("P/L") + 1, round(pl, 2))
-
                     st.success(f"✅ Trade closed. P/L: ${round(pl, 2):,.2f}")
                     st.rerun()
                 except Exception as e:
                     st.error(f"❌ Error updating PCS trade: {e}")
 
 # ============================
-# 📋 TRADE LOG & DASHBOARD
+# 📋 TRADE LOG
 # ============================
 st.subheader("📋 Current Trades")
-
 if df.empty and df_pcs.empty:
     st.warning("No trade data available.")
 else:
@@ -193,21 +165,40 @@ else:
     st.download_button("💾 Download All Trades as CSV", combined_df.to_csv(index=False), file_name="all_trades.csv")
 
 # ============================
-# ✏️ EDIT / DELETE TRADES BY STRATEGY
+# ✏️ EDIT / DELETE SECTION
 # ============================
 st.subheader("✏️ Edit or Delete Trades by Strategy")
-
 strategy_to_edit = st.selectbox("Select Strategy to Edit", ["Select", "Wheel Strategy", "Put Credit Spread"])
 
 if strategy_to_edit == "Wheel Strategy":
-    # Existing logic for Wheel edit (unchanged)
-    ...
+    if df.empty:
+        st.info("No Wheel Strategy trades available.")
+    else:
+        edit_index = st.selectbox("Select Wheel Trade", df.index, format_func=lambda i: f"{i} | {df.loc[i, 'Ticker']} | {df.loc[i, 'Date']}", key="wheel_edit_dropdown")
+        selected_row = df.loc[edit_index]
+        with st.form("edit_wheel_form"):
+            edited = {col: st.text_input(col, value=str(selected_row[col]), key=f"wheel_{col}") for col in df.columns}
+            action = st.radio("Action", ["Edit", "Delete"], key="wheel_action")
+            confirm = st.form_submit_button("Submit Wheel Change")
+            if confirm:
+                row_number = edit_index + 2
+                if action == "Delete":
+                    sheet.delete_rows(row_number)
+                    st.success("✅ Wheel trade deleted.")
+                else:
+                    for i, col in enumerate(df.columns):
+                        sheet.update_cell(row_number, i + 1, edited[col])
+                    st.success("✅ Wheel trade updated.")
+                st.rerun()
 
 elif strategy_to_edit == "Put Credit Spread":
     try:
         pcs_tab = client.open(SHEET_NAME).worksheet("PCS")
         pcs_data = pcs_tab.get_all_records()
         df_pcs_edit = pd.DataFrame(pcs_data)
+        for col in ["Result", "P/L", "Delta", "Qty", "Credit Collected", "Ticker", "Date"]:
+            if col not in df_pcs_edit.columns:
+                df_pcs_edit[col] = ""
     except Exception as e:
         st.error(f"❌ Failed to load PCS data: {e}")
         df_pcs_edit = pd.DataFrame()
@@ -217,7 +208,6 @@ elif strategy_to_edit == "Put Credit Spread":
     else:
         edit_index_pcs = st.selectbox("Select PCS Trade", df_pcs_edit.index, format_func=lambda i: f"{i} | {df_pcs_edit.loc[i, 'Ticker']} | {df_pcs_edit.loc[i, 'Date']}", key="pcs_edit_dropdown")
         selected_row_pcs = df_pcs_edit.loc[edit_index_pcs]
-
         with st.form("edit_pcs_form"):
             edited_pcs = {col: st.text_input(col, value=str(selected_row_pcs[col]), key=f"pcs_{col}") for col in df_pcs_edit.columns}
             action_pcs = st.radio("Action", ["Edit", "Delete"], key="pcs_action")
