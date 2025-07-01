@@ -8,13 +8,30 @@ import json
 import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="ThetaFlowz Tracker", layout="wide")
-# ============================
-# 📘 TITLE + PERFORMANCE METRICS
-# ============================
 
+# ============================
+# 📘 TITLE + GOOGLE SHEETS SETUP
+# ============================
 st.title("📘 ThetaFlowz Tracker")
 
-# Combine Wheel + PCS data if available
+SHEET_NAME = "Wheel Strategy Trades"
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+creds_dict = json.loads(st.secrets["GOOGLE_SHEETS_CREDS"])
+creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+client = gspread.authorize(creds)
+
+# Load Wheel Strategy Sheet
+sheet = client.open(SHEET_NAME).sheet1
+try:
+    data = sheet.get_all_records()
+    df = pd.DataFrame(data)
+    df = df.loc[:, df.columns != '']
+    df.columns = pd.Index([str(col).strip() for col in df.columns])
+except Exception as e:
+    st.error(f"❌ Failed to load Wheel data: {e}")
+    df = pd.DataFrame()
+
+# Load PCS Tab
 try:
     pcs_tab = client.open(SHEET_NAME).worksheet("PCS")
     pcs_data = pcs_tab.get_all_records()
@@ -36,20 +53,21 @@ try:
     df_pcs["Process"] = "Sell PCS"
     df_pcs["Result"] = "Open"
     df_pcs["Assigned Price"] = ""
-    df_pcs["Current Price at time"] = df_pcs["Ticker"].apply(get_current_price)
+    df_pcs["Current Price at time"] = df_pcs["Ticker"].apply(lambda t: yf.Ticker(t).fast_info.get("last_price"))
     df_pcs["P/L"] = 0
     df_pcs["Shares Owned"] = ""
 except Exception as e:
     st.error(f"❌ Failed to load PCS tab: {e}")
     df_pcs = pd.DataFrame()
 
-# Show metrics if any data is available
+# ============================
+# 📊 METRICS DASHBOARD
+# ============================
 if not df.empty or not df_pcs.empty:
     combined_df = pd.concat([df, df_pcs], ignore_index=True)
     combined_df["P/L"] = pd.to_numeric(combined_df.get("P/L", 0), errors="coerce").fillna(0.0)
 
     st.markdown("### 📊 Performance Summary")
-
     col1, col2 = st.columns(2)
     with col1:
         st.metric("📄 Total Trades", len(combined_df))
