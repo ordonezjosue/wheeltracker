@@ -160,10 +160,25 @@ if df.empty and df_pcs.empty:
     st.warning("No trade data available.")
 else:
     combined_df = pd.concat([df, df_pcs], ignore_index=True)
-    combined_df["P/L"] = pd.to_numeric(combined_df.get("P/L", 0), errors="coerce").fillna(0.0)
-    st.dataframe(combined_df.drop(columns=["Notes"], errors="ignore"))
-    st.download_button("💾 Download All Trades as CSV", combined_df.to_csv(index=False), file_name="all_trades.csv")
+combined_df["P/L"] = pd.to_numeric(combined_df.get("P/L", 0), errors="coerce").fillna(0.0)
 
+# Clean and reorder columns
+column_order = [
+    "Strategy", "Process", "Ticker", "Date", "Strike", "Long Put", "Width", "Delta",
+    "DTE", "Credit Collected", "Qty", "Expiration", "Result", "Current Price at time",
+    "Assigned Price", "P/L", "Shares Owned"
+]
+
+# Filter out unknown/extra columns and preserve order
+display_df = combined_df[[col for col in column_order if col in combined_df.columns]]
+
+# Clean up any None or NaN
+display_df = display_df.fillna("")
+
+st.dataframe(display_df)
+st.download_button("💾 Download All Trades as CSV", display_df.to_csv(index=False), file_name="all_trades.csv")
+
+ 
 # ============================
 # ✏️ EDIT / DELETE SECTION
 # ============================
