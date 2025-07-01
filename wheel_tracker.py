@@ -300,26 +300,27 @@ st.subheader("✏️ Edit or Delete Trades by Strategy")
 strategy_to_edit = st.selectbox("Select Strategy to Edit", ["Select", "Wheel Strategy", "Put Credit Spread"])
 
 # --- WHEEL STRATEGY EDIT ---
-if strategy_to_edit == "Wheel Strategy" and not df.empty:
-    edit_index = st.selectbox("Select Wheel Trade to Edit/Delete", df.index, format_func=lambda i: f"{i} | {df.loc[i, 'Ticker']} | {df.loc[i, 'Date']}", key="wheel_edit_dropdown")
-    selected_row = df.loc[edit_index]
+if strategy_to_edit == "Wheel Strategy":
+    if df.empty:
+        st.info("No Wheel Strategy trades available.")
+    else:
+        edit_index = st.selectbox("Select Wheel Trade", df.index, format_func=lambda i: f"{i} | {df.loc[i, 'Ticker']} | {df.loc[i, 'Date']}", key="wheel_edit_dropdown")
+        selected_row = df.loc[edit_index]
 
-    with st.form("edit_wheel_form"):
-        edited = {}
-        for col in df.columns:
-            edited[col] = st.text_input(col, value=str(selected_row[col]), key=f"wheel_{col}")
-        action = st.radio("Action", ["Edit", "Delete"], key="wheel_action")
-        confirm = st.form_submit_button("Submit Wheel Change")
-        if confirm:
-            row_number = edit_index + 2
-            if action == "Delete":
-                sheet.delete_rows(row_number)
-                st.success("✅ Wheel row deleted.")
-            else:
-                for i, col in enumerate(df.columns):
-                    sheet.update_cell(row_number, i + 1, edited[col])
-                st.success("✅ Wheel row updated.")
-            st.rerun()
+        with st.form("edit_wheel_form"):
+            edited = {col: st.text_input(col, value=str(selected_row[col]), key=f"wheel_{col}") for col in df.columns}
+            action = st.radio("Action", ["Edit", "Delete"], key="wheel_action")
+            confirm = st.form_submit_button("Submit Wheel Change")
+            if confirm:
+                row_number = edit_index + 2
+                if action == "Delete":
+                    sheet.delete_rows(row_number)
+                    st.success("✅ Wheel trade deleted.")
+                else:
+                    for i, col in enumerate(df.columns):
+                        sheet.update_cell(row_number, i + 1, edited[col])
+                    st.success("✅ Wheel trade updated.")
+                st.rerun()
 
 # --- PCS STRATEGY EDIT ---
 elif strategy_to_edit == "Put Credit Spread":
@@ -331,23 +332,24 @@ elif strategy_to_edit == "Put Credit Spread":
         st.error(f"❌ Failed to load PCS data: {e}")
         df_pcs_edit = pd.DataFrame()
 
-    if not df_pcs_edit.empty:
-        edit_index_pcs = st.selectbox("Select PCS Trade to Edit/Delete", df_pcs_edit.index, format_func=lambda i: f"{i} | {df_pcs_edit.loc[i, 'Ticker']} | {df_pcs_edit.loc[i, 'Date']}", key="pcs_edit_dropdown")
+    if df_pcs_edit.empty:
+        st.info("No PCS trades available.")
+    else:
+        edit_index_pcs = st.selectbox("Select PCS Trade", df_pcs_edit.index, format_func=lambda i: f"{i} | {df_pcs_edit.loc[i, 'Ticker']} | {df_pcs_edit.loc[i, 'Date']}", key="pcs_edit_dropdown")
         selected_row_pcs = df_pcs_edit.loc[edit_index_pcs]
 
         with st.form("edit_pcs_form"):
-            edited_pcs = {}
-            for col in df_pcs_edit.columns:
-                edited_pcs[col] = st.text_input(col, value=str(selected_row_pcs[col]), key=f"pcs_{col}")
+            edited_pcs = {col: st.text_input(col, value=str(selected_row_pcs[col]), key=f"pcs_{col}") for col in df_pcs_edit.columns}
             action_pcs = st.radio("Action", ["Edit", "Delete"], key="pcs_action")
             confirm_pcs = st.form_submit_button("Submit PCS Change")
             if confirm_pcs:
                 row_number = edit_index_pcs + 2
                 if action_pcs == "Delete":
                     pcs_tab.delete_rows(row_number)
-                    st.success("✅ PCS row deleted.")
+                    st.success("✅ PCS trade deleted.")
                 else:
                     for i, col in enumerate(df_pcs_edit.columns):
                         pcs_tab.update_cell(row_number, i + 1, edited_pcs[col])
-                    st.success("✅ PCS row updated.")
+                    st.success("✅ PCS trade updated.")
                 st.rerun()
+
