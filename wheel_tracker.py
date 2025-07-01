@@ -268,31 +268,6 @@ else:
     col5.metric("💹 Avg P/L per Trade", f"${combined_df['P/L'].mean():.2f}")
 
 # ============================
-# ✏️ EDIT / DELETE WHEEL TRADES
-# ============================
-st.subheader("✏️ Edit or Delete Wheel Trades")
-if not df.empty:
-    edit_index = st.selectbox("Select Wheel Trade to Edit/Delete", df.index, format_func=lambda i: f"{i} | {df.loc[i, 'Ticker']} | {df.loc[i, 'Date']}", key="wheel_edit_dropdown")
-    selected_row = df.loc[edit_index]
-
-    with st.form("edit_wheel_form"):
-        edited = {}
-        for col in df.columns:
-            edited[col] = st.text_input(col, value=str(selected_row[col]), key=f"wheel_{col}")
-        action = st.radio("Action", ["Edit", "Delete"], key="wheel_action")
-        confirm = st.form_submit_button("Submit Wheel Change")
-        if confirm:
-            row_number = edit_index + 2
-            if action == "Delete":
-                sheet.delete_rows(row_number)
-                st.success("✅ Wheel row deleted.")
-            else:
-                for i, col in enumerate(df.columns):
-                    sheet.update_cell(row_number, i + 1, edited[col])
-                st.success("✅ Wheel row updated.")
-            st.rerun()
-
-# ============================
 # ✏️ UNIFIED STRATEGY EDITOR
 # ============================
 st.subheader("✏️ Edit or Delete Trades by Strategy")
@@ -352,4 +327,5 @@ elif strategy_to_edit == "Put Credit Spread":
                         pcs_tab.update_cell(row_number, i + 1, edited_pcs[col])
                     st.success("✅ PCS trade updated.")
                 st.rerun()
+
 
