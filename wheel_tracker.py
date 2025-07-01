@@ -130,12 +130,10 @@ if strategy == "Put Credit Spread":
                 st.success("✅ Put Credit Spread saved to PCS tab.")
                 st.rerun()
 
-    elif pcs_action == "Buy To Close":
+elif pcs_action == "Buy To Close":
     st.subheader("🔒 Close Existing PCS Position")
 
-    # Filter for open PCS trades
     open_pcs = df_pcs[df_pcs["Result"] == "Open"]
-
     if open_pcs.empty:
         st.warning("No open PCS trades available.")
     else:
@@ -151,14 +149,11 @@ if strategy == "Put Credit Spread":
 
         if submit:
             try:
-                # Clean and parse credit + qty
                 raw_credit = str(row["Credit Collected"]).replace("$", "").strip()
                 credit = float(raw_credit)
                 qty = int(row["Qty"])
-
                 pl = (credit - close_price) * qty * 100
 
-                # Update the sheet
                 pcs_tab.update_cell(idx + 2, df_pcs.columns.get_loc("Result") + 1, "Closed")
                 pcs_tab.update_cell(idx + 2, df_pcs.columns.get_loc("P/L") + 1, round(pl, 2))
 
@@ -167,6 +162,7 @@ if strategy == "Put Credit Spread":
 
             except Exception as e:
                 st.error(f"❌ Error updating PCS trade: {e}")
+
 
 # ============================
 # 📋 Current Trades
