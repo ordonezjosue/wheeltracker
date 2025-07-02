@@ -177,3 +177,32 @@ else:
     display_df = combined_df[[col for col in column_order if col in combined_df.columns]].fillna("")
     st.dataframe(display_df)
     st.download_button("💾 Download All Trades as CSV", display_df.to_csv(index=False), file_name="all_trades.csv")
+
+# ============================
+# ✏️ Edit/Delete Trades
+# ============================
+st.subheader("✏️ Edit or Delete Trades")
+edit_df = pd.concat([df_wheel.assign(Source="Wheel"), df_pcs.assign(Source="PCS")], ignore_index=True)
+if edit_df.empty:
+    st.info("No trades available for editing.")
+else:
+    selected_idx = st.radio("Select a trade to edit/delete:", edit_df.index,
+                             format_func=lambda i: f"{i} | {edit_df.loc[i, 'Ticker']} | {edit_df.loc[i, 'Date']} | {edit_df.loc[i, 'Strategy']}")
+    selected_row = edit_df.loc[selected_idx]
+    with st.form("edit_form"):
+        updated_data = {col: st.text_input(col, str(selected_row.get(col, ""))) for col in selected_row.index if col not in ["Source"]}
+        action = st.radio("Action", ["Edit", "Delete"])
+        submitted = st.form_submit_button("Submit")
+        if submitted:
+            sheet_ref = sheet if selected_row["Source"] == "Wheel" else pcs_tab
+            ref_df = df_wheel if selected_row["Source"] == "Wheel" else df_pcs
+            row_number = selected_idx + HEADER_OFFSET
+            if action == "Delete":
+                sheet_ref.delete_rows(row_number)
+                st.success("✅ Trade deleted successfully.")
+                st.rerun()
+            else:
+                for col_index, (col, val) in enumerate(updated_data.items()):
+                    sheet_ref.update_cell(row_number, col_index + 1, val)
+                st.success("✅ Trade updated successfully.")
+                st.rerun()
