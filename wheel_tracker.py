@@ -1,3 +1,5 @@
+# thetaflowz_app.py
+
 import streamlit as st
 import pandas as pd
 import gspread
@@ -14,21 +16,21 @@ st.set_page_config(page_title="ThetaFlowz Tracker", layout="wide")
 st.title("📘 ThetaFlowz Tracker")
 
 SHEET_NAME = "Wheel Strategy Trades"
-HEADER_OFFSET = 2  # row 1 = headers, row 2 = first data row
+HEADER_OFFSET = 2  # Data starts from row 2
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds_dict = json.loads(st.secrets["GOOGLE_SHEETS_CREDS"])
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 client = gspread.authorize(creds)
 
 # ============================
-# 📥 Load Data from Sheets
+# 📊 Data Loaders
 # ============================
 @st.cache_data(ttl=600)
 def load_sheet(sheet_name):
     try:
         tab = client.open(SHEET_NAME).worksheet(sheet_name)
-        data = tab.get_all_records()
-        return tab, pd.DataFrame(data)
+        records = tab.get_all_records()
+        return tab, pd.DataFrame(records)
     except Exception as e:
         st.error(f"❌ Failed to load '{sheet_name}' tab: {e}")
         return None, pd.DataFrame()
@@ -41,18 +43,23 @@ def get_current_price(ticker):
     except:
         return None
 
-sheet, df_wheel = load_sheet("Sheet1")
+# ============================
+# 📥 Load Data
+# ============================
+sheet, df_wheel = load_sheet("Wheel")
 pcs_tab, df_pcs = load_sheet("PCS")
 
-# Ensure required columns
 required_columns = [
     "Strategy", "Process", "Ticker", "Date", "Strike", "Delta", "DTE", "Credit Collected",
     "Qty", "Expiration", "Result", "Assigned Price", "Current Price at time", "P/L", "Shares Owned", "Notes"
 ]
+
+# Ensure Wheel columns
 for col in required_columns:
     if col not in df_wheel.columns:
         df_wheel[col] = ""
 
+# Ensure PCS columns
 pcs_expected = [
     "Date", "Ticker", "Short Put", "Delta", "DTE", "Credit Collected", "Qty",
     "Expiration", "Notes", "Result", "Assigned Price", "Current Price at time",
@@ -68,12 +75,12 @@ df_pcs["Process"] = "Sell PCS"
 df_pcs["Current Price at time"] = df_pcs["Ticker"].astype(str).apply(get_current_price)
 
 # ============================
-# 📊 Performance Metrics
+# 📊 Metrics Dashboard
 # ============================
 if not df_wheel.empty or not df_pcs.empty:
     combined_df = pd.concat([df_wheel, df_pcs], ignore_index=True)
     combined_df["P/L"] = pd.to_numeric(combined_df["P/L"], errors="coerce").fillna(0.0)
-
+    
     st.markdown("### 📊 Performance Summary")
     col1, col2 = st.columns(2)
     with col1:
@@ -82,21 +89,17 @@ if not df_wheel.empty or not df_pcs.empty:
     with col2:
         st.metric("🔁 Active Trades", f"{(combined_df['Result'] == 'Open').sum():,}")
         st.metric("💹 Avg P/L per Trade", f"${combined_df['P/L'].mean():.2f}")
-    win_rate = round((combined_df["P/L"] > 0).mean() * 100, 2)
+    win_rate = round((combined_df['P/L'] > 0).mean() * 100, 2)
     st.metric("✅ Win Rate", f"{win_rate:.2f}%")
 
 # ============================
-# ➕ Sidebar Strategy Entry
+# ➕ Strategy Entry Sidebar
 # ============================
 st.sidebar.header("➕ Guided Trade Entry")
 strategy = st.sidebar.selectbox("Select Strategy", ["Select", "Wheel Strategy", "Put Credit Spread"])
 
-# ============================
-# 🔁 PCS Entry and Close
-# ============================
 if strategy == "Put Credit Spread":
     pcs_action = st.sidebar.selectbox("Select PCS Action", ["New Entry", "Buy To Close", "Roll (Coming Soon)"])
-
     if pcs_action == "New Entry":
         st.subheader("Put Credit Spread Entry")
         with st.form("pcs_form"):
@@ -130,7 +133,6 @@ if strategy == "Put Credit Spread":
     elif pcs_action == "Buy To Close":
         st.subheader("🔒 Close Existing PCS Position")
         open_pcs = df_pcs[df_pcs["Result"] == "Open"]
-
         if open_pcs.empty:
             st.warning("No open PCS trades available.")
         else:
@@ -158,7 +160,7 @@ if strategy == "Put Credit Spread":
                     st.error(f"❌ Error updating PCS trade: {e}")
 
 # ============================
-# 📋 Display All Trades
+# 📋 Display Current Trades
 # ============================
 st.subheader("📋 Current Trades")
 if df_wheel.empty and df_pcs.empty:
@@ -166,7 +168,7 @@ if df_wheel.empty and df_pcs.empty:
 else:
     combined_df = pd.concat([df_wheel, df_pcs], ignore_index=True)
     combined_df["P/L"] = pd.to_numeric(combined_df["P/L"], errors="coerce").fillna(0.0)
-    combined_df["Delta"] = pd.to_numeric(combined_df.get("Delta", ""), errors="coerce")
+    combined_df["Delta"] = pd.to_numeric(combined_df["Delta"], errors="coerce")
     column_order = [
         "Strategy", "Process", "Ticker", "Date", "Strike",
         "Long Put", "Width", "Delta", "DTE", "Credit Collected", "Qty", "Expiration",
