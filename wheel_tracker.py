@@ -45,7 +45,7 @@ def get_current_price(ticker):
         return None
 
 # ============================
-# 📅 Load Data
+# 🗕️ Load Data
 # ============================
 sheet, df_wheel = load_sheet("Wheel")
 pcs_tab, df_pcs = load_sheet("PCS")
@@ -76,7 +76,7 @@ df_pcs["Current Price at time"] = df_pcs["Ticker"].astype(str).apply(get_current
 # ============================
 # 📂 Tastytrade CSV Upload
 # ============================
-tt_file = st.sidebar.file_uploader("📅 Upload Tastytrade CSV", type="csv")
+tt_file = st.sidebar.file_uploader("🗕️ Upload Tastytrade CSV", type="csv")
 df_tt = pd.DataFrame()
 
 if tt_file is not None:
@@ -98,7 +98,14 @@ if tt_file is not None:
         for _, row in df_tt_raw.iterrows():
             symbol = row.get("Symbol")
             description = str(row.get("Description"))
-            price = float(row.get("Price", 0))
+            price_str = str(row.get("Price", "0"))
+            price_clean = re.findall(r"[-+]?\d*\.\d+|\d+", price_str)
+            try:
+                price = float(price_clean[0]) if price_clean else 0.0
+            except Exception as e:
+                st.warning(f"Failed to parse price: '{price_str}' - {e}")
+                continue
+
             timestamp = row.get("Time") or row.get("TimeStampAtType") or date.today().strftime("%Y-%m-%d")
 
             st.write(f"Debug: Row Description - {description}")
