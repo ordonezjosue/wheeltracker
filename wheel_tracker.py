@@ -133,29 +133,52 @@ if tt_file is not None:
                     open_legs[key] = {
                         "Date": timestamp[:10], "Ticker": symbol, "Strike": strike, "Qty": abs(qty),
                         "Credit Collected": price * abs(qty), "Expiration": exp_date_parsed,
-                        "Action": action, "Price": price
+                        "Action": action, "Price": price, "Type": opt_type
                     }
                 elif action in ["STC", "BTC"] and key in open_legs:
                     entry = open_legs.pop(key)
                     pl = (entry["Credit Collected"] - price * entry["Qty"]) * 100
-                    short_put = entry["Strike"] if entry["Action"] == "STO" else ""
-                    long_put = entry["Strike"] if entry["Action"] == "BTO" else ""
-                    width = abs(short_put - long_put) if short_put and long_put else ""
+                    short_leg = entry["Strike"] if entry["Action"] == "STO" else ""
+                    long_leg = entry["Strike"] if entry["Action"] == "BTO" else ""
+                    width = abs(short_leg - long_leg) if short_leg and long_leg else ""
 
+                    strategy = "Put Credit Spread" if entry["Type"] == "Put" else "Call Credit Spread"
                     pcs_trades.append({
                         "Date": entry["Date"], "Ticker": entry["Ticker"],
-                        "Short Put": short_put, "Long Put": long_put, "Width": width,
-                        "Delta": "", "DTE": "", "Credit Collected": entry["Credit Collected"],
-                        "Qty": entry["Qty"], "Expiration": entry["Expiration"], "Notes": "Imported from Tastytrade",
+                        "Short Put": short_leg if entry["Type"] == "Put" else "",
+                        "Long Put": long_leg if entry["Type"] == "Put" else "",
+                        "Width": width, "Delta": "", "DTE": "",
+                        "Credit Collected": entry["Credit Collected"], "Qty": entry["Qty"],
+                        "Expiration": entry["Expiration"], "Notes": "Imported from Tastytrade",
                         "Result": "Closed", "Assigned Price": "", "Current Price at time": "",
-                        "P/L": round(pl, 2), "Shares Owned": ""
+                        "P/L": round(pl, 2), "Shares Owned": "",
+                        "Strategy": strategy, "Process": f"Sell {'PCS' if entry['Type'] == 'Put' else 'CCS'}"
                     })
+
+        # Add open legs that weren't closed
+        for key, entry in open_legs.items():
+            short_leg = entry["Strike"] if entry["Action"] == "STO" else ""
+            long_leg = entry["Strike"] if entry["Action"] == "BTO" else ""
+            width = abs(short_leg - long_leg) if short_leg and long_leg else ""
+
+            strategy = "Put Credit Spread" if entry["Type"] == "Put" else "Call Credit Spread"
+            pcs_trades.append({
+                "Date": entry["Date"], "Ticker": entry["Ticker"],
+                "Short Put": short_leg if entry["Type"] == "Put" else "",
+                "Long Put": long_leg if entry["Type"] == "Put" else "",
+                "Width": width, "Delta": "", "DTE": "",
+                "Credit Collected": entry["Credit Collected"], "Qty": entry["Qty"],
+                "Expiration": entry["Expiration"], "Notes": "Imported from Tastytrade (Open)",
+                "Result": "Open", "Assigned Price": "", "Current Price at time": "",
+                "P/L": 0.0, "Shares Owned": "",
+                "Strategy": strategy, "Process": f"Sell {'PCS' if entry['Type'] == 'Put' else 'CCS'}"
+            })
 
         if pcs_trades:
             for trade in pcs_trades:
                 row = [str(trade.get(col, "")) for col in pcs_expected]
                 pcs_tab.append_row(row)
-            st.success(f"✅ Imported {len(pcs_trades)} PCS trades from Tastytrade CSV.")
+            st.success(f"✅ Imported {len(pcs_trades)} option spread trades from Tastytrade CSV.")
 
     except Exception as e:
         st.error(f"❌ Failed to process Tastytrade CSV: {e}. Columns found: {list(df_tt_raw.columns) if 'df_tt_raw' in locals() else 'None'}")
