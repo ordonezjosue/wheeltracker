@@ -4,34 +4,36 @@ import gspread
 import yfinance as yf
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import date, timedelta
+from functools import lru_cache
 import json
 
+# ============================
+# 🔐 Google Sheets Setup
+# ============================
 st.set_page_config(page_title="ThetaFlowz Tracker", layout="wide")
-
-# ============================
-# 📘 TITLE + GOOGLE SHEETS SETUP
-# ============================
 st.title("📘 ThetaFlowz Tracker")
 
 SHEET_NAME = "Wheel Strategy Trades"
+HEADER_OFFSET = 2  # row 1 = headers, row 2 = first data row
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds_dict = json.loads(st.secrets["GOOGLE_SHEETS_CREDS"])
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 client = gspread.authorize(creds)
 
-# Load Wheel Strategy Sheet
-sheet = client.open(SHEET_NAME).sheet1
-try:
-    data = sheet.get_all_records()
-    df = pd.DataFrame(data)
-    df = df.loc[:, df.columns != '']
-    df.columns = pd.Index([str(col).strip() for col in df.columns])
-except Exception as e:
-    st.error(f"❌ Failed to load Wheel data: {e}")
-    df = pd.DataFrame()
+# ============================
+# 📥 Load Data from Sheets
+# ============================
+@st.cache_data(ttl=600)
+def load_sheet(sheet_name):
+    try:
+        tab = client.open(SHEET_NAME).worksheet(sheet_name)
+        data = tab.get_all_records()
+        return tab, pd.DataFrame(data)
+    except Exception as e:
+        st.error(f"❌ Failed to load '{sheet_name}' tab: {e}")
+        return None, pd.DataFrame()
 
-# --- Yahoo Finance Price Fetch ---
-@st.cache_data(ttl=3600)
+@lru_cache(maxsize=128)
 def get_current_price(ticker):
     try:
         t = yf.Ticker(ticker)
@@ -39,73 +41,61 @@ def get_current_price(ticker):
     except:
         return None
 
-# Load PCS Tab
-try:
-    pcs_tab = client.open(SHEET_NAME).worksheet("PCS")
-    pcs_data = pcs_tab.get_all_records()
-    df_pcs = pd.DataFrame(pcs_data)
+sheet, df_wheel = load_sheet("Sheet1")
+pcs_tab, df_pcs = load_sheet("PCS")
 
-    df_pcs = df_pcs.rename(columns={
-        "Date": "Date", "Ticker": "Ticker", "Short Put": "Strike",
-        "Delta": "Delta", "DTE": "DTE", "Credit Collected": "Credit Collected",
-        "Qty": "Qty", "Expiration": "Expiration", "Notes": "Notes"
-    })
-
-    for col in ["Result", "Assigned Price", "Current Price at time", "P/L", "Shares Owned", "Long Put", "Width"]:
-        if col not in df_pcs.columns:
-            df_pcs[col] = ""
-
-    df_pcs["Result"] = df_pcs["Result"].replace("", "Open")
-    df_pcs["P/L"] = pd.to_numeric(df_pcs.get("P/L", 0), errors="coerce").fillna(0)
-    df_pcs["Strategy"] = "Put Credit Spread"
-    df_pcs["Process"] = "Sell PCS"
-    df_pcs["Current Price at time"] = df_pcs["Ticker"].apply(get_current_price)
-
-except Exception as e:
-    st.error(f"❌ Failed to load PCS tab: {e}")
-    df_pcs = pd.DataFrame()
-
-# ============================
-# 📊 METRICS DASHBOARD
-# ============================
-if not df.empty or not df_pcs.empty:
-    combined_df = pd.concat([df, df_pcs], ignore_index=True)
-    combined_df["P/L"] = pd.to_numeric(combined_df.get("P/L", 0), errors="coerce").fillna(0.0)
-
-    st.markdown("### 📊 Performance Summary")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric("📄 Total Trades", len(combined_df))
-        st.metric("💰 Total Profit", f"${combined_df['P/L'].sum():,.2f}")
-    with col2:
-        st.metric("🔁 Active Trades", (combined_df["Result"] == "Open").sum())
-        st.metric("💹 Avg P/L per Trade", f"${combined_df['P/L'].mean():.2f}")
-
-    win_rate = (combined_df["P/L"] > 0).mean() * 100
-    st.metric("✅ Win Rate", f"{win_rate:.2f}%")
-
-# Ensure Wheel columns
+# Ensure required columns
 required_columns = [
     "Strategy", "Process", "Ticker", "Date", "Strike", "Delta", "DTE", "Credit Collected",
     "Qty", "Expiration", "Result", "Assigned Price", "Current Price at time", "P/L", "Shares Owned", "Notes"
 ]
 for col in required_columns:
-    if col not in df.columns:
-        df[col] = ""
+    if col not in df_wheel.columns:
+        df_wheel[col] = ""
+
+pcs_expected = [
+    "Date", "Ticker", "Short Put", "Delta", "DTE", "Credit Collected", "Qty",
+    "Expiration", "Notes", "Result", "Assigned Price", "Current Price at time",
+    "P/L", "Shares Owned", "Long Put", "Width"
+]
+for col in pcs_expected:
+    if col not in df_pcs.columns:
+        df_pcs[col] = ""
+
+df_pcs["P/L"] = pd.to_numeric(df_pcs["P/L"], errors="coerce").fillna(0)
+df_pcs["Strategy"] = "Put Credit Spread"
+df_pcs["Process"] = "Sell PCS"
+df_pcs["Current Price at time"] = df_pcs["Ticker"].astype(str).apply(get_current_price)
 
 # ============================
-# ➕ SIDEBAR STRATEGY SELECTION
+# 📊 Performance Metrics
+# ============================
+if not df_wheel.empty or not df_pcs.empty:
+    combined_df = pd.concat([df_wheel, df_pcs], ignore_index=True)
+    combined_df["P/L"] = pd.to_numeric(combined_df["P/L"], errors="coerce").fillna(0.0)
+
+    st.markdown("### 📊 Performance Summary")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("📄 Total Trades", f"{len(combined_df):,}")
+        st.metric("💰 Total Profit", f"${combined_df['P/L'].sum():,.2f}")
+    with col2:
+        st.metric("🔁 Active Trades", f"{(combined_df['Result'] == 'Open').sum():,}")
+        st.metric("💹 Avg P/L per Trade", f"${combined_df['P/L'].mean():.2f}")
+    win_rate = round((combined_df["P/L"] > 0).mean() * 100, 2)
+    st.metric("✅ Win Rate", f"{win_rate:.2f}%")
+
+# ============================
+# ➕ Sidebar Strategy Entry
 # ============================
 st.sidebar.header("➕ Guided Trade Entry")
 strategy = st.sidebar.selectbox("Select Strategy", ["Select", "Wheel Strategy", "Put Credit Spread"])
 
-
 # ============================
-# 🔁 PUT CREDIT SPREAD ENTRY + BUY TO CLOSE
+# 🔁 PCS Entry and Close
 # ============================
 if strategy == "Put Credit Spread":
     pcs_action = st.sidebar.selectbox("Select PCS Action", ["New Entry", "Buy To Close", "Roll (Coming Soon)"])
-    pcs_sheet = client.open(SHEET_NAME).worksheet("PCS")
 
     if pcs_action == "New Entry":
         st.subheader("Put Credit Spread Entry")
@@ -124,18 +114,21 @@ if strategy == "Put Credit Spread":
 
             if submit:
                 width = round(abs(short_put - long_put), 2)
-                row = [
-                    date_entry.strftime("%Y-%m-%d"), ticker, dte, expiration.strftime("%Y-%m-%d"),
-                    short_put, long_put, width, delta, credit, qty, notes
-                ]
-                pcs_sheet.append_row([str(x) for x in row])
+                row_dict = {
+                    "Date": date_entry.strftime("%Y-%m-%d"), "Ticker": ticker,
+                    "Short Put": short_put, "Long Put": long_put, "Width": width, "Delta": delta,
+                    "Credit Collected": credit, "Qty": qty, "DTE": dte,
+                    "Expiration": expiration.strftime("%Y-%m-%d"), "Notes": notes,
+                    "Result": "Open", "P/L": "", "Assigned Price": "",
+                    "Current Price at time": "", "Shares Owned": ""
+                }
+                row = [str(row_dict.get(col, "")) for col in pcs_expected]
+                pcs_tab.append_row(row)
                 st.success("✅ Put Credit Spread saved to PCS tab.")
                 st.rerun()
 
     elif pcs_action == "Buy To Close":
         st.subheader("🔒 Close Existing PCS Position")
-
-        # Load open PCS trades
         open_pcs = df_pcs[df_pcs["Result"] == "Open"]
 
         if open_pcs.empty:
@@ -147,159 +140,38 @@ if strategy == "Put Credit Spread":
                 format_func=lambda i: f"{i} | {open_pcs.loc[i, 'Ticker']} | {open_pcs.loc[i, 'Date']}"
             )
             row = open_pcs.loc[idx]
-
             close_price = st.number_input("Amount Paid to Close ($)", step=0.01)
             submit = st.button("Finalize Close")
 
             if submit:
                 try:
-                    # Clean and convert values
-                    raw_credit = str(row["Credit Collected"]).replace("$", "").strip()
-                    credit = float(raw_credit)
+                    credit = float(str(row["Credit Collected"]).replace("$", "").strip())
                     qty = int(row["Qty"])
                     pl = (credit - close_price) * qty * 100
-
-                    # Get column positions in PCS sheet
                     result_col = df_pcs.columns.get_loc("Result") + 1
                     pl_col = df_pcs.columns.get_loc("P/L") + 1
-
-                    # Update Google Sheet
-                    pcs_tab.update_cell(idx + 2, result_col, "Closed")
-                    pcs_tab.update_cell(idx + 2, pl_col, round(pl, 2))
-
+                    pcs_tab.update_cell(idx + HEADER_OFFSET, result_col, "Closed")
+                    pcs_tab.update_cell(idx + HEADER_OFFSET, pl_col, round(pl, 2))
                     st.success(f"✅ Trade closed. P/L: ${round(pl, 2):,.2f}")
                     st.rerun()
-
                 except Exception as e:
                     st.error(f"❌ Error updating PCS trade: {e}")
 
 # ============================
-# 📥 Load PCS Tab Safely
-# ============================
-try:
-    pcs_tab = client.open(SHEET_NAME).worksheet("PCS")
-    pcs_data = pcs_tab.get_all_records()
-    df_pcs = pd.DataFrame(pcs_data)
-
-    # Define all required PCS columns
-    expected_columns = [
-        "Date", "Ticker", "Short Put", "Delta", "DTE", "Credit Collected", "Qty",
-        "Expiration", "Notes", "Result", "Assigned Price", "Current Price at time",
-        "P/L", "Shares Owned", "Long Put", "Width"
-    ]
-
-    # Add missing columns if any
-    for col in expected_columns:
-        if col not in df_pcs.columns:
-            df_pcs[col] = ""
-
-    # Ensure numeric columns are valid
-    df_pcs["P/L"] = pd.to_numeric(df_pcs.get("P/L", 0), errors="coerce").fillna(0)
-    df_pcs["Strategy"] = "Put Credit Spread"
-    df_pcs["Process"] = "Sell PCS"
-
-    # Only fetch prices if 'Ticker' exists and isn't blank
-    if "Ticker" in df_pcs.columns:
-        df_pcs["Current Price at time"] = df_pcs["Ticker"].apply(get_current_price)
-    else:
-        df_pcs["Current Price at time"] = ""
-
-except Exception as e:
-    st.error(f"❌ Failed to load PCS tab: {e}")
-    df_pcs = pd.DataFrame(columns=[
-        "Date", "Ticker", "Short Put", "Delta", "DTE", "Credit Collected", "Qty",
-        "Expiration", "Notes", "Result", "Assigned Price", "Current Price at time",
-        "P/L", "Shares Owned", "Long Put", "Width", "Strategy", "Process"
-    ])
-
-
-# ============================
-# 📋 Current Trades
+# 📋 Display All Trades
 # ============================
 st.subheader("📋 Current Trades")
-
-if df.empty and df_pcs.empty:
+if df_wheel.empty and df_pcs.empty:
     st.warning("No trade data available.")
 else:
-    # Combine Wheel + PCS
-    combined_df = pd.concat([df, df_pcs], ignore_index=True)
-
-    # Ensure P/L and Delta are numeric
-    combined_df["P/L"] = pd.to_numeric(combined_df.get("P/L", 0), errors="coerce").fillna(0.0)
+    combined_df = pd.concat([df_wheel, df_pcs], ignore_index=True)
+    combined_df["P/L"] = pd.to_numeric(combined_df["P/L"], errors="coerce").fillna(0.0)
     combined_df["Delta"] = pd.to_numeric(combined_df.get("Delta", ""), errors="coerce")
-
-    # Define final column order
     column_order = [
         "Strategy", "Process", "Ticker", "Date", "Strike",
-        "Long Put", "Width", "Delta",
-        "DTE", "Credit Collected", "Qty", "Expiration",
+        "Long Put", "Width", "Delta", "DTE", "Credit Collected", "Qty", "Expiration",
         "Result", "Current Price at time", "Assigned Price", "P/L", "Shares Owned"
     ]
-
-    # Filter and re-order columns
     display_df = combined_df[[col for col in column_order if col in combined_df.columns]].fillna("")
-
-    # Display + Download
     st.dataframe(display_df)
     st.download_button("💾 Download All Trades as CSV", display_df.to_csv(index=False), file_name="all_trades.csv")
-
-
- 
-# ============================
-# ✏️ EDIT / DELETE SECTION
-# ============================
-st.subheader("✏️ Edit or Delete Trades by Strategy")
-strategy_to_edit = st.selectbox("Select Strategy to Edit", ["Select", "Wheel Strategy", "Put Credit Spread"])
-
-if strategy_to_edit == "Wheel Strategy":
-    if df.empty:
-        st.info("No Wheel Strategy trades available.")
-    else:
-        edit_index = st.selectbox("Select Wheel Trade", df.index, format_func=lambda i: f"{i} | {df.loc[i, 'Ticker']} | {df.loc[i, 'Date']}", key="wheel_edit_dropdown")
-        selected_row = df.loc[edit_index]
-        with st.form("edit_wheel_form"):
-            edited = {col: st.text_input(col, value=str(selected_row[col]), key=f"wheel_{col}") for col in df.columns}
-            action = st.radio("Action", ["Edit", "Delete"], key="wheel_action")
-            confirm = st.form_submit_button("Submit Wheel Change")
-            if confirm:
-                row_number = edit_index + 2
-                if action == "Delete":
-                    sheet.delete_rows(row_number)
-                    st.success("✅ Wheel trade deleted.")
-                else:
-                    for i, col in enumerate(df.columns):
-                        sheet.update_cell(row_number, i + 1, edited[col])
-                    st.success("✅ Wheel trade updated.")
-                st.rerun()
-
-elif strategy_to_edit == "Put Credit Spread":
-    try:
-        pcs_tab = client.open(SHEET_NAME).worksheet("PCS")
-        pcs_data = pcs_tab.get_all_records()
-        df_pcs_edit = pd.DataFrame(pcs_data)
-        for col in ["Result", "P/L", "Delta", "Qty", "Credit Collected", "Ticker", "Date"]:
-            if col not in df_pcs_edit.columns:
-                df_pcs_edit[col] = ""
-    except Exception as e:
-        st.error(f"❌ Failed to load PCS data: {e}")
-        df_pcs_edit = pd.DataFrame()
-
-    if df_pcs_edit.empty:
-        st.info("No PCS trades available.")
-    else:
-        edit_index_pcs = st.selectbox("Select PCS Trade", df_pcs_edit.index, format_func=lambda i: f"{i} | {df_pcs_edit.loc[i, 'Ticker']} | {df_pcs_edit.loc[i, 'Date']}", key="pcs_edit_dropdown")
-        selected_row_pcs = df_pcs_edit.loc[edit_index_pcs]
-        with st.form("edit_pcs_form"):
-            edited_pcs = {col: st.text_input(col, value=str(selected_row_pcs[col]), key=f"pcs_{col}") for col in df_pcs_edit.columns}
-            action_pcs = st.radio("Action", ["Edit", "Delete"], key="pcs_action")
-            confirm_pcs = st.form_submit_button("Submit PCS Change")
-            if confirm_pcs:
-                row_number = edit_index_pcs + 2
-                if action_pcs == "Delete":
-                    pcs_tab.delete_rows(row_number)
-                    st.success("✅ PCS trade deleted.")
-                else:
-                    for i, col in enumerate(df_pcs_edit.columns):
-                        pcs_tab.update_cell(row_number, i + 1, edited_pcs[col])
-                    st.success("✅ PCS trade updated.")
-                st.rerun()
