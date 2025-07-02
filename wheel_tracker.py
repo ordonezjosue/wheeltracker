@@ -81,6 +81,7 @@ df_tt = pd.DataFrame()
 if tt_file is not None:
     try:
         df_tt_raw = pd.read_csv(tt_file)
+        df_tt_raw.columns = df_tt_raw.columns.str.strip()  # Normalize column names
         df_tt_raw = df_tt_raw[~df_tt_raw["Underlying Symbol"].astype(str).str.contains("/", na=False)].copy()
 
         pcs_trades = []
@@ -119,7 +120,7 @@ if tt_file is not None:
             st.success(f"✅ Imported {len(pcs_trades)} PCS trades from Tastytrade CSV.")
 
     except Exception as e:
-        st.error(f"❌ Failed to process Tastytrade CSV: {e}")
+        st.error(f"❌ Failed to process Tastytrade CSV: {e}. Columns found: {list(df_tt_raw.columns) if 'df_tt_raw' in locals() else 'None'}")
 
 # ============================
 # 📊 Metrics Dashboard
