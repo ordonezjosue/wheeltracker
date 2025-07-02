@@ -5,9 +5,10 @@ import pandas as pd
 import gspread
 import yfinance as yf
 from oauth2client.service_account import ServiceAccountCredentials
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 from functools import lru_cache
 import json
+import re
 
 # ============================
 # 🔐 Google Sheets Setup
@@ -81,30 +82,39 @@ df_tt = pd.DataFrame()
 if tt_file is not None:
     try:
         df_tt_raw = pd.read_csv(tt_file)
-        df_tt_raw.columns = df_tt_raw.columns.str.strip()  # Normalize column names
-        df_tt_raw = df_tt_raw[~df_tt_raw["Underlying Symbol"].astype(str).str.contains("/", na=False)].copy()
+        df_tt_raw.columns = df_tt_raw.columns.str.strip()
+
+        if "Symbol" not in df_tt_raw.columns or "Description" not in df_tt_raw.columns:
+            raise ValueError("Missing required columns: 'Symbol' or 'Description'")
+
+        df_tt_raw = df_tt_raw[~df_tt_raw["Description"].astype(str).str.contains("/", na=False)].copy()
 
         pcs_trades = []
         open_trades = {}
 
         for _, row in df_tt_raw.iterrows():
-            symbol = row.get("Underlying Symbol")
-            action = row.get("Action")
-            date_str = row.get("Date")
-            qty = int(row.get("Quantity", 0))
+            symbol = row.get("Symbol")
+            description = str(row.get("Description"))
             price = float(row.get("Price", 0))
-            strike = float(row.get("Strike Price", 0))
-            exp = row.get("Expiration Date")
-            leg_id = f"{symbol}_{exp}_{strike}_{'PUT' if 'Put' in str(row.get('Type', '')) else 'CALL'}"
+            timestamp = row.get("Time") or row.get("TimeStampAtType") or date.today().strftime("%Y-%m-%d")
 
-            if action == "SELL_TO_OPEN":
+            match = re.search(r"(BUY|SELL)_TO_(OPEN|CLOSE) (\d+) ([A-Z]+) (\d{2}/\d{2}/\d{2}) (PUT|CALL) (\d+(?:\.\d+)?)", description)
+            if not match:
+                continue
+
+            action, _, qty, ticker, exp, opt_type, strike = match.groups()
+            leg_id = f"{ticker}_{exp}_{strike}_{opt_type}"
+            qty = int(qty)
+            strike = float(strike)
+
+            if action == "SELL":
                 open_trades[leg_id] = {
-                    "Date": date_str, "Ticker": symbol, "Strike": strike, "Qty": abs(qty),
-                    "Credit Collected": price * abs(qty), "Expiration": exp
+                    "Date": timestamp[:10], "Ticker": ticker, "Strike": strike, "Qty": qty,
+                    "Credit Collected": price * qty, "Expiration": datetime.strptime(exp, "%m/%d/%y").strftime("%Y-%m-%d")
                 }
-            elif action == "BUY_TO_CLOSE" and leg_id in open_trades:
+            elif action == "BUY" and leg_id in open_trades:
                 entry = open_trades.pop(leg_id)
-                pl = (entry["Credit Collected"] - price * abs(qty)) * 100
+                pl = (entry["Credit Collected"] - price * qty) * 100
                 pcs_trades.append({
                     "Date": entry["Date"], "Ticker": entry["Ticker"], "Short Put": entry["Strike"],
                     "Delta": "", "DTE": "", "Credit Collected": entry["Credit Collected"],
