@@ -93,7 +93,7 @@ if tt_file is not None:
         df_tt_raw = df_tt_raw[~df_tt_raw["Description"].astype(str).str.contains("/", na=False)].copy()
 
         pcs_trades = []
-        open_trades = {}
+        open_legs = {}
 
         for _, row in df_tt_raw.iterrows():
             symbol = row.get("Symbol")
@@ -107,34 +107,49 @@ if tt_file is not None:
                 continue
 
             timestamp = row.get("Time") or row.get("TimeStampAtType") or date.today().strftime("%Y-%m-%d")
-
             st.write(f"Debug: Row Description - {description}")
 
-            match = re.search(r"(BUY|SELL)_TO_(OPEN|CLOSE) (\d+) ([A-Z]+) (\d{2}/\d{2}/\d{2}) (PUT|CALL) (\d+(?:\.\d+)?)", description)
-            if not match:
+            legs = re.findall(r"([+-]?\d+)\s+(\w+)\s+(\d+)\s+(?:\d+d|Exp)?\s+(\d+(?:\.\d+)?)\s+(Put|Call)\s+(STC|BTC|STO|BTO)", description, flags=re.IGNORECASE)
+
+            if not legs:
                 st.write("Debug: No match for regex pattern")
                 continue
 
-            action, _, qty, ticker, exp, opt_type, strike = match.groups()
-            leg_id = f"{ticker}_{exp}_{strike}_{opt_type}"
-            qty = int(qty)
-            strike = float(strike)
+            for leg in legs:
+                qty, exp_month, exp_day, strike, opt_type, action = leg
+                qty = int(qty)
+                strike = float(strike)
+                opt_type = opt_type.capitalize()
+                action = action.upper()
+                exp_date = f"{exp_month} {exp_day} {datetime.now().year}"
+                try:
+                    exp_date_parsed = datetime.strptime(exp_date, "%b %d %Y").strftime("%Y-%m-%d")
+                except:
+                    continue
 
-            if action == "SELL":
-                open_trades[leg_id] = {
-                    "Date": timestamp[:10], "Ticker": ticker, "Strike": strike, "Qty": qty,
-                    "Credit Collected": price * qty, "Expiration": datetime.strptime(exp, "%m/%d/%y").strftime("%Y-%m-%d")
-                }
-            elif action == "BUY" and leg_id in open_trades:
-                entry = open_trades.pop(leg_id)
-                pl = (entry["Credit Collected"] - price * qty) * 100
-                pcs_trades.append({
-                    "Date": entry["Date"], "Ticker": entry["Ticker"], "Short Put": entry["Strike"],
-                    "Delta": "", "DTE": "", "Credit Collected": entry["Credit Collected"],
-                    "Qty": entry["Qty"], "Expiration": entry["Expiration"], "Notes": "Imported from Tastytrade",
-                    "Result": "Closed", "Assigned Price": "", "Current Price at time": "",
-                    "P/L": round(pl, 2), "Shares Owned": "", "Long Put": "", "Width": ""
-                })
+                key = f"{symbol}_{exp_date_parsed}_{strike}_{opt_type}"
+
+                if action in ["STO", "BTO"]:
+                    open_legs[key] = {
+                        "Date": timestamp[:10], "Ticker": symbol, "Strike": strike, "Qty": abs(qty),
+                        "Credit Collected": price * abs(qty), "Expiration": exp_date_parsed,
+                        "Action": action, "Price": price
+                    }
+                elif action in ["STC", "BTC"] and key in open_legs:
+                    entry = open_legs.pop(key)
+                    pl = (entry["Credit Collected"] - price * entry["Qty"]) * 100
+                    short_put = entry["Strike"] if entry["Action"] == "STO" else ""
+                    long_put = entry["Strike"] if entry["Action"] == "BTO" else ""
+                    width = abs(short_put - long_put) if short_put and long_put else ""
+
+                    pcs_trades.append({
+                        "Date": entry["Date"], "Ticker": entry["Ticker"],
+                        "Short Put": short_put, "Long Put": long_put, "Width": width,
+                        "Delta": "", "DTE": "", "Credit Collected": entry["Credit Collected"],
+                        "Qty": entry["Qty"], "Expiration": entry["Expiration"], "Notes": "Imported from Tastytrade",
+                        "Result": "Closed", "Assigned Price": "", "Current Price at time": "",
+                        "P/L": round(pl, 2), "Shares Owned": ""
+                    })
 
         if pcs_trades:
             for trade in pcs_trades:
