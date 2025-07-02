@@ -9,6 +9,36 @@ from datetime import date, timedelta
 from functools import lru_cache
 import json
 
+import streamlit as st
+
+# ============================
+# 🔐 Basic Authentication
+# ============================
+auth_config = st.secrets.get("auth", {})
+USERNAMES = auth_config.get("usernames", [])
+PASSWORDS = auth_config.get("passwords", [])
+
+if not USERNAMES or not PASSWORDS:
+    st.stop()  # Exit if no auth config found
+
+# Basic login logic
+def authenticate():
+    with st.sidebar:
+        st.subheader("🔐 Login Required")
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        if st.button("Login"):
+            if username in USERNAMES and password == PASSWORDS[USERNAMES.index(username)]:
+                st.session_state["authenticated"] = True
+                st.experimental_rerun()
+            else:
+                st.error("Invalid username or password")
+
+if not st.session_state.get("authenticated"):
+    authenticate()
+    st.stop()  # Prevent rest of app from loading
+
+
 # ============================
 # 🔐 Google Sheets Setup
 # ============================
