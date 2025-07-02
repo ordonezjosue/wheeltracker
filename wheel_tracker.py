@@ -45,7 +45,7 @@ def get_current_price(ticker):
         return None
 
 # ============================
-# 📥 Load Data
+# 📅 Load Data
 # ============================
 sheet, df_wheel = load_sheet("Wheel")
 pcs_tab, df_pcs = load_sheet("PCS")
@@ -76,13 +76,16 @@ df_pcs["Current Price at time"] = df_pcs["Ticker"].astype(str).apply(get_current
 # ============================
 # 📂 Tastytrade CSV Upload
 # ============================
-tt_file = st.sidebar.file_uploader("📥 Upload Tastytrade CSV", type="csv")
+tt_file = st.sidebar.file_uploader("📅 Upload Tastytrade CSV", type="csv")
 df_tt = pd.DataFrame()
 
 if tt_file is not None:
     try:
         df_tt_raw = pd.read_csv(tt_file)
         df_tt_raw.columns = df_tt_raw.columns.str.strip()
+
+        st.write("### Debug: Raw Tastytrade Columns")
+        st.write(list(df_tt_raw.columns))
 
         if "Symbol" not in df_tt_raw.columns or "Description" not in df_tt_raw.columns:
             raise ValueError("Missing required columns: 'Symbol' or 'Description'")
@@ -98,8 +101,11 @@ if tt_file is not None:
             price = float(row.get("Price", 0))
             timestamp = row.get("Time") or row.get("TimeStampAtType") or date.today().strftime("%Y-%m-%d")
 
+            st.write(f"Debug: Row Description - {description}")
+
             match = re.search(r"(BUY|SELL)_TO_(OPEN|CLOSE) (\d+) ([A-Z]+) (\d{2}/\d{2}/\d{2}) (PUT|CALL) (\d+(?:\.\d+)?)", description)
             if not match:
+                st.write("Debug: No match for regex pattern")
                 continue
 
             action, _, qty, ticker, exp, opt_type, strike = match.groups()
@@ -146,7 +152,7 @@ if not df_wheel.empty or not df_pcs.empty:
         st.metric("💰 Total Profit", f"${combined_df['P/L'].sum():,.2f}")
     with col2:
         st.metric("🔁 Active Trades", f"{(combined_df['Result'] == 'Open').sum():,}")
-        st.metric("💹 Avg P/L per Trade", f"${combined_df['P/L'].mean():.2f}")
+        st.metric("📉 Avg P/L per Trade", f"${combined_df['P/L'].mean():.2f}")
     win_rate = round((combined_df['P/L'] > 0).mean() * 100, 2)
     st.metric("✅ Win Rate", f"{win_rate:.2f}%")
 
@@ -167,4 +173,4 @@ else:
     ]
     display_df = combined_df[[col for col in column_order if col in combined_df.columns]].fillna("")
     st.dataframe(display_df)
-    st.download_button("💾 Download All Trades as CSV", display_df.to_csv(index=False), file_name="all_trades.csv")
+    st.download_button("📀 Download All Trades as CSV", display_df.to_csv(index=False), file_name="all_trades.csv")
