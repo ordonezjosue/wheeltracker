@@ -4,7 +4,7 @@ import streamlit as st
 import pandas as pd
 import gspread
 import yfinance as yf
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 from datetime import date, timedelta, datetime
 from functools import lru_cache
 import json
@@ -20,7 +20,7 @@ SHEET_NAME = "Wheel Strategy Trades"
 HEADER_OFFSET = 2  # Data starts from row 2
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds_dict = json.loads(st.secrets["GOOGLE_SHEETS_CREDS"])
-creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
 client = gspread.authorize(creds)
 
 # ============================
@@ -45,7 +45,7 @@ def get_current_price(ticker):
         return None
 
 # ============================
-# 🗕️ Load Data
+# �헕️ Load Data
 # ============================
 sheet, df_wheel = load_sheet("Wheel")
 pcs_tab, df_pcs = load_sheet("PCS")
@@ -76,7 +76,7 @@ df_pcs["Current Price at time"] = df_pcs["Ticker"].astype(str).apply(get_current
 # ============================
 # 📂 Tastytrade CSV Upload
 # ============================
-tt_file = st.sidebar.file_uploader("🗕️ Upload Tastytrade CSV", type="csv")
+tt_file = st.sidebar.file_uploader("�헕️ Upload Tastytrade CSV", type="csv")
 df_tt = pd.DataFrame()
 
 if tt_file is not None:
@@ -109,21 +109,21 @@ if tt_file is not None:
             timestamp = row.get("Time") or row.get("TimeStampAtType") or date.today().strftime("%Y-%m-%d")
             st.write(f"Debug: Row Description - {description}")
 
-            legs = re.findall(r"([+-]?\d+)\s+(\w+)\s+(\d+)\s+(?:\d+d|Exp)?\s+(\d+(?:\.\d+)?)\s+(Put|Call)\s+(STC|BTC|STO|BTO)", description, flags=re.IGNORECASE)
+            legs = re.findall(r"([+-]?\d+)\s+(\w+)\s+(\d+d|Exp)?\s*(\d+(?:\.\d+)?)\s+(Put|Call)\s+(STC|BTC|STO|BTO)", description, flags=re.IGNORECASE)
 
             if not legs:
                 st.write("Debug: No match for regex pattern")
                 continue
 
             for leg in legs:
-                qty, exp_month, exp_day, strike, opt_type, action = leg
+                qty, exp_month, _, strike, opt_type, action = leg
                 qty = int(qty)
                 strike = float(strike)
                 opt_type = opt_type.capitalize()
                 action = action.upper()
-                exp_date = f"{exp_month} {exp_day} {datetime.now().year}"
+                exp_date = f"{exp_month} {datetime.now().year}"
                 try:
-                    exp_date_parsed = datetime.strptime(exp_date, "%b %d %Y").strftime("%Y-%m-%d")
+                    exp_date_parsed = datetime.strptime(exp_date, "%b %Y").strftime("%Y-%m-%d")
                 except:
                     continue
 
